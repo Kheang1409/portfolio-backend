@@ -38,10 +38,18 @@ public class EmailService : IEmailService
             """
         };
         using var smtp = new SmtpClient();
-        var smtpServer = _config["EmailSettings:SmtpServer"];
-        var port = _config["EmailSettings:Port"] ?? throw new InvalidOperationException("EmailSettings:Port is not configured.");
-        var sernderEmail = _config["EmailSettings:SenderEmail"];
-        var password = _config["EmailSettings:Password"];
+        var smtpServer = Environment.GetEnvironmentVariable("EmailSettings__SmtpServer")
+                        ?? _config["EmailSettings:SmtpServer"]
+                        ?? throw new InvalidOperationException("EmailSettings:SmtpServer is not configured.");
+        var port = Environment.GetEnvironmentVariable("EmailSettings__Port")
+                    ?? _config["EmailSettings:Port"]
+                    ?? throw new InvalidOperationException("EmailSettings:Port is not configured.");
+        var sernderEmail = Environment.GetEnvironmentVariable("EmailSettings__SenderEmail")
+                        ?? _config["EmailSettings:SenderEmail"]
+                        ?? throw new InvalidOperationException("EmailSettings:SenderEmail is not configured.");
+        var password = Environment.GetEnvironmentVariable("EmailSettings__Password")
+                        ?? _config["EmailSettings:Password"]
+                        ?? throw new InvalidOperationException("EmailSettings:Password is not configured.");
         await smtp.ConnectAsync(smtpServer, int.Parse(port), SecureSocketOptions.SslOnConnect);
         await smtp.AuthenticateAsync(sernderEmail, password);
         await smtp.SendAsync(email);
