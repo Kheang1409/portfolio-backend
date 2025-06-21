@@ -1,0 +1,58 @@
+# Build results
+bin/
+obj/
+out/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / VSCode / VS
+.idea/
+.vscode/
+*.code-workspace
+
+# ASP.NET Core secrets
+**/appsettings.Development.json
+secrets.json
+
+# dotenv
+.env
+
+# Logs
+*.log
+logs/
+Log/
+
+# Published output
+publish/
+wwwroot/dist/
+*.db
+*.db-shm
+*.db-wal
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Others
+*.DS_Store
+*.swp
+*.bak
+*.orig
+*.rej
+
+# OS junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Optional: Rider/JetBrains
+*.dotCover
+.ReSharper/
+*.dotSettings.user
