@@ -1,6 +1,0 @@
-@ContactFormApi_HostAddress = http://localhost:5261
-
-GET {{ContactFormApi_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

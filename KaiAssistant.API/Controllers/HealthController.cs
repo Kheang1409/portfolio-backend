@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ContactFormApi.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/healths")]
     public class HealthController : ControllerBase
     {
         [HttpGet]

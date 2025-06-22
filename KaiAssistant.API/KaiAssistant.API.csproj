@@ -7,8 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MailKit" Version="4.12.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.6" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KaiAssistant.Application\KaiAssistant.Application.csproj" />
+    <ProjectReference Include="..\KaiAssistant.Infrastructure\KaiAssistant.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
