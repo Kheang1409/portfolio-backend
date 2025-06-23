@@ -20,7 +20,7 @@ public static class EmailServiceCollectionExtensions
         string senderEmail = Environment.GetEnvironmentVariable("SMTP_SENDER_EMAIL")
                             ?? emailSettingsSection["SenderEmail"]
                             ?? throw new ArgumentException("Email setting 'SenderEmail' is missing or empty.");
-        string recieverEmail = Environment.GetEnvironmentVariable("SMTP_SENDER_EMAIL")
+        string recieverEmail = Environment.GetEnvironmentVariable("SMTP_RECIEVER_EMAIL")
                             ?? emailSettingsSection["RecieverEmail"]
                             ?? throw new ArgumentException("Email setting 'RecieverEmail' is missing or empty.");
         string senderPassword = Environment.GetEnvironmentVariable("SMTP_SENDER_PASSWORD")
