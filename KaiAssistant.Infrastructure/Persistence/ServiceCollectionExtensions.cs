@@ -10,8 +10,10 @@ public static class ServiceCollectionExtensions
     {
 
         services
+        // .AddOpenAiServices(configuration)
+        .AddHuggingFaceServices(configuration)
         .AddEmailServices(configuration)
-        .AddApplicationServices(configuration);
+        .AddApplicationServices();
 
         return services;
     }

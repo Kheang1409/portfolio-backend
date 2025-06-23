@@ -24,6 +24,10 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
+var resumePath = Path.Combine(Directory.GetCurrentDirectory(), "docs", "kai_taing_resume.txt");
+var assistantService = app.Services.GetRequiredService<IAssistantService>();
+assistantService.LoadResume(resumePath);
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -34,9 +38,8 @@ app.UseHttpsRedirection();
 
 app.UseCors("AllowNetlifyApp"); 
 
-var resumePath = Path.Combine(Directory.GetCurrentDirectory(), "docs", "kai_taing_resume.txt");
-var assistantService = app.Services.GetRequiredService<IAssistantService>();
-assistantService.LoadResume(resumePath);
+
 
 app.MapControllers();
 app.Run();
+

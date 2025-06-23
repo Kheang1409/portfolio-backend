@@ -5,12 +5,12 @@ using OllamaSharp;
 
 namespace KaiAssistant.Application.Services;
 
-public class AssistantService : IAssistantService
+public class AssistantServiceOllamaSharp : IAssistantService
 {
     private readonly List<ResumeChunk> _resumeChunks = new();
     private readonly OllamaApiClient _ollamaClient;
 
-    public AssistantService()
+    public AssistantServiceOllamaSharp()
     {
         _ollamaClient = new OllamaApiClient(new Uri("http://localhost:11434"))
         {
