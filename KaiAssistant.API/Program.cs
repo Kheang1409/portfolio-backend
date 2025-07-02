@@ -24,7 +24,7 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
-var resumePath = Path.Combine(Directory.GetCurrentDirectory(), "docs", "kai_taing_resume.txt");
+var resumePath = Path.Combine(Directory.GetCurrentDirectory(), "docs", "kai_taing_resume.json");
 var assistantService = app.Services.GetRequiredService<IAssistantService>();
 assistantService.LoadResume(resumePath);
 

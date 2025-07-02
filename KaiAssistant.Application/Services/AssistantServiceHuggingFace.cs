@@ -40,14 +40,21 @@ namespace KaiAssistant.Application.Services
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("Resume not found.", filePath);
 
-            string resumeText = File.ReadAllText(filePath);
+            var jsonText = File.ReadAllText(filePath);
+            var resume = JsonSerializer.Deserialize<Resume>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
             _resumeChunks.Clear();
 
-            for (int i = 0; i < resumeText.Length; i += ChunkSize)
-            {
-                string chunk = resumeText.Substring(i, Math.Min(ChunkSize, resumeText.Length - i));
-                _resumeChunks.Add(new ResumeChunk { Content = chunk });
-            }
+            if (resume is null)
+                throw new Exception("Failed to deserialize resume.");
+
+            // Example chunking strategy:
+            AddChunk("Summary", resume.Summary);
+            AddChunk("Skills", string.Join(", ", resume.Skills.LanguagesFrameworks));
+            foreach (var job in resume.Experience)
+                AddChunk($"Experience at {job.Company}", string.Join("\n", job.Highlights));
+            foreach (var project in resume.Projects)
+                AddChunk($"Project: {project.Name}", project.Description);
         }
 
         public async Task<string> AskQuestionAsync(string question)
@@ -99,6 +106,17 @@ namespace KaiAssistant.Application.Services
                         .GetString();
 
             return reply ?? "No response from model.";
+        }
+
+        private void AddChunk(string label, string content)
+        {
+            if (string.IsNullOrWhiteSpace(content)) return;
+
+            for (int i = 0; i < content.Length; i += ChunkSize)
+            {
+                var chunk = content.Substring(i, Math.Min(ChunkSize, content.Length - i));
+                _resumeChunks.Add(new ResumeChunk { Content = $"[{label}] {chunk}" });
+            }
         }
     }
 }

@@ -1,0 +1,153 @@
+{
+  "personalInfo": {
+    "legalName": "Hang Kheang Taing",
+    "preferredName": "Kai Taing",
+    "contact": {
+      "email": "hangkheangtaing@gmail.com",
+      "phone": "+1-641-233-0129",
+      "linkedin": "https://www.linkedin.com/in/hang-kheang-taing/",
+      "github": "https://github.com/Kheang1409"
+    }
+  },
+  "summary": "Innovative systems engineer focused on building scalable backend infrastructure, streamlining legacy systems, and implementing high-performance, secure automation solutions. Skilled in architecting resilient enterprise applications and aligning software delivery with strategic business needs.",
+  "skills": {
+    "languagesFrameworks": [
+      "C#", ".NET Core", ".NET Framework", "F#", "JavaScript", "TypeScript", "Python", "T-SQL", "LINQ", "Dapper", "ADO.NET"
+    ],
+    "databases": [
+      "SQL Server", "PostgreSQL", "MongoDB", "CosmosDB", "MySQL", "Redis"
+    ],
+    "frontend": [
+      "ASP.NET MVC", "Web API", "Razor Pages", "Blazor", "Angular", "React", "HTML5", "CSS3", "Bootstrap", "Tailwind CSS", "jQuery"
+    ],
+    "architecturePatterns": [
+      "Clean Architecture", "DDD", "CQRS", "Microservices", "API Gateway", "SAGA", "Mediator", "Repository Pattern", "Unit of Work"
+    ],
+    "devOps": [
+      "AWS", "Azure", "Docker", "Kubernetes", "GitHub Actions", "Bitbucket Pipelines", "GitLab CI", "Jenkins", "CI/CD"
+    ],
+    "security": [
+      "OAuth2", "JWT", "IdentityServer4", "CORS"
+    ],
+    "testing": [
+      "xUnit", "NUnit", "Moq"
+    ],
+    "tools": [
+      "Visual Studio", "VS Code", "SSMS", "DBeaver", "Postman", "Swagger", "Git", "Jira", "Confluence", "Trello"
+    ],
+    "other": [
+      "SSIS", "Stored Procedures", "PowerShell", "WinForms", "WPF", "Agile", "Scrum", "Kanban", "Waterfall", "Code Reviews", "Pair Programming"
+    ]
+  },
+  "experience": [
+    {
+      "role": "Senior .NET Developer & Core Banking",
+      "company": "Sahakrinpheap Microfinance PLC",
+      "location": "Phnom Penh, Cambodia",
+      "dates": { "from": "2021-09", "to": "2024-04" },
+      "highlights": [
+        "Built biometric attendance tracking with ZK Teco devices – reduced payroll delay by 7 days.",
+        "Unified two legacy core banking systems into a single .NET application.",
+        "Implemented real-time Telegram Bot notifications – increased reliability by 99%.",
+        "Optimized SQL with indexing and caching – reduced report load time from minutes to <2 seconds.",
+        "Secured reporting platform with authentication and CORS.",
+        "Supervised junior developers and documented workflow for handover.",
+        "Migrated legacy system from .NET Framework 4.8.1 to .NET 7 – improved memory and startup performance."
+      ]
+    },
+    {
+      "role": ".NET Full-Stack Developer",
+      "company": "Pathmazing Inc",
+      "location": "Phnom Penh, Cambodia",
+      "dates": { "from": "2021-03", "to": "2021-09" },
+      "highlights": [
+        "Developed Python REST APIs and integrated with custom Odoo ERP.",
+        "Upgraded to Odoo 14 – enhanced eCommerce and inventory workflows.",
+        "Integrated ABA PayWay gateway – increased transaction speed and reliability by 30%.",
+        "Built Khmer Care platform – raised $70K+ and partnered with 30+ organizations.",
+        "Enhanced Firearms Metrics Platform – improved data accuracy and report performance."
+      ]
+    },
+    {
+      "role": ".NET & Angular Developer",
+      "company": "Anakut Digital Solution Co. Ltd",
+      "location": "Phnom Penh, Cambodia",
+      "dates": { "from": "2020-10", "to": "2021-05" },
+      "highlights": [
+        "Built POS system with inventory automation and scale integration.",
+        "Delivered Hotel Management System with real-time booking engine.",
+        "Developed Clinic Management System – reduced patient wait times via real-time scheduling and alerts.",
+        "Customized Odoo ERP for e-commerce enhancements."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "degree": "Master of Science in Computer Science",
+      "institution": "Maharishi International University",
+      "location": "Fairfield, Iowa, USA",
+      "dates": { "from": "2024-04", "to": "Present" }
+    },
+    {
+      "degree": "Bachelor of Science in Computer Science",
+      "institution": "Royal University of Phnom Penh",
+      "location": "Phnom Penh, Cambodia",
+      "dates": { "from": "2016", "to": "2020-11" }
+    }
+  ],
+  "projects": [
+    {
+      "name": "Angkor Milk Consulting",
+      "description": "Optimized memory and SQL performance in a meal reporting application within 2 days."
+    },
+    {
+      "name": "Personal Portfolio Website",
+      "description": "Deployed via CI/CD on Netlify, integrated AI assistant, Git versioned."
+    },
+    {
+      "name": "Job Tracker Platform",
+      "description": "Built with .NET Microservices, Angular, MongoDB, Kafka, JWT, OAuth2, SMTP email notifications."
+    },
+    {
+      "name": "Media Platform",
+      "description": "Modular .NET Web API using Clean Architecture and DDD, Dockerized, with OAuth2, JWT, CI/CD automation."
+    }
+  ],
+  "certifications": [
+    {
+      "title": "SQL (Advanced)",
+      "issuer": "HackerRank",
+      "date": "2025-04"
+    },
+    {
+      "title": "Apache Kafka Essentials",
+      "issuer": "LinkedIn Learning",
+      "date": "2025-03"
+    },
+    {
+      "title": "Building and Securing RESTful APIs in .NET",
+      "issuer": "LinkedIn Learning",
+      "date": "2025-03"
+    },
+    {
+      "title": "Designing RESTful APIs",
+      "issuer": "LinkedIn Learning",
+      "date": "2025-03"
+    },
+    {
+      "title": "Practical GitHub Actions",
+      "issuer": "LinkedIn Learning",
+      "date": "2025-03"
+    },
+    {
+      "title": "Problem Solving (Intermediate)",
+      "issuer": "HackerRank",
+      "date": "2025-02"
+    },
+    {
+      "title": "Best Project Award – Khmer Care",
+      "issuer": "Pathmazing Inc",
+      "date": "2021-01"
+    }
+  ]
+}
