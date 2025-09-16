@@ -1,6 +1,6 @@
 namespace KaiAssistant.Domain.Entities;
 
-public class HuggingFaceSettings : AssistantBehaviorSettings
+public class GeminiSettings : AssistantBehaviorSettings
 {
     public string ApiKey { get; set; } = string.Empty;
     public string ModelName { get; set; } = string.Empty;

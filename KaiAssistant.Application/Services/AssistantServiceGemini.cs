@@ -8,33 +8,35 @@ using System.Net;
 
 namespace KaiAssistant.Application.Services
 {
-    public class AssistantServiceHuggingFace : IAssistantService
+    public class AssistantServiceGemini : IAssistantService
     {
         private readonly List<ResumeChunk> _resumeChunks = new();
         private readonly string _apiKey;
-        private readonly string _modelName;
         private readonly string _endpoint;
+        private readonly string _modelName;
         private readonly string _systemPrompt;
         private readonly HttpClient _httpClient;
 
         private const int ChunkSize = 500;
 
-        public AssistantServiceHuggingFace(IOptions<HuggingFaceSettings> options, HttpClient httpClient)
+        public AssistantServiceGemini(IOptions<GeminiSettings> options, HttpClient httpClient)
         {
             var settings = options.Value;
 
             if (string.IsNullOrWhiteSpace(settings.ApiKey))
-                throw new ArgumentException("HuggingFace API key is missing.");
+                throw new ArgumentException("Gemini API key is missing.");
 
-            if (string.IsNullOrWhiteSpace(settings.ModelName))
-                throw new ArgumentException("HuggingFace model name is missing.");
+            if (string.IsNullOrWhiteSpace(settings.Endpoint))
+                throw new ArgumentException("Gemini endpoint is missing.");
 
             _apiKey = settings.ApiKey;
-            _modelName = settings.ModelName;
             _endpoint = settings.Endpoint;
             _systemPrompt = settings.SystemPrompt;
+            _modelName = settings.ModelName;
             _httpClient = httpClient;
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+
+            // Gemini requires x-goog-api-key
+            _httpClient.DefaultRequestHeaders.Add("x-goog-api-key", _apiKey);
         }
 
         public void LoadResume(string filePath)
@@ -51,11 +53,12 @@ namespace KaiAssistant.Application.Services
             if (resume is null)
                 throw new Exception("Failed to deserialize resume.");
 
-            // Example chunking strategy:
             AddChunk("Summary", resume.Summary);
             AddChunk("Skills", string.Join(", ", resume.Skills.LanguagesFrameworks));
+
             foreach (var job in resume.Experience)
                 AddChunk($"Experience at {job.Company}", string.Join("\n", job.Highlights));
+
             foreach (var project in resume.Projects)
                 AddChunk($"Project: {project.Name}", project.Description);
         }
@@ -65,59 +68,70 @@ namespace KaiAssistant.Application.Services
             if (_resumeChunks.Count == 0)
                 throw new InvalidOperationException("Resume is not loaded. Please load the resume before asking questions.");
 
-            // Concatenate all resume chunks into one system message
-            string combinedResume = string.Join("\n\n", _resumeChunks.Select(c => c.Content));
+            string combinedResume = string.Join("\n\n", _resumeChunks.Select(c => $"{c.Label}: {c.Content}"));
 
-            var messages = new[]
+            // Merge system prompt with resume
+            string prompt = $"{_systemPrompt}\n\nResume context:\n{combinedResume}\n\nUser Question: {question}";
+
+            var payload = new
             {
-                new { role = "system", content = $"{_systemPrompt}. Use the following resume information to answer questions:\n{combinedResume}" },
-                new { role = "user", content = question }
+                contents = new[]
+                {
+                    new
+                    {
+                        parts = new[]
+                        {
+                            new { text = prompt }
+                        }
+                    }
+                }
             };
 
-            var requestPayload = new
-            {
-                model = _modelName,
-                messages = messages,
-                stream = false
-            };
-
-            var json = JsonSerializer.Serialize(requestPayload);
+            var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-
-            var response = await _httpClient.PostAsync(_endpoint, content);
-
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                throw new Exception($"HuggingFace API error: NotFound Not Found - model '{_modelName}' does not exist or is inaccessible.");
-            }
+            var response = await _httpClient.PostAsync($"{_endpoint}{_modelName}", content);
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                throw new Exception($"HuggingFace API error ({response.StatusCode}): {errorBody}");
+                throw new Exception($"Gemini API error ({response.StatusCode}): {errorBody}");
             }
 
             var responseBody = await response.Content.ReadAsStringAsync();
 
             using var doc = JsonDocument.Parse(responseBody);
-            var reply = doc.RootElement
-                        .GetProperty("choices")[0]
-                        .GetProperty("message")
-                        .GetProperty("content")
-                        .GetString();
+
+            // Correct parsing for Gemini response
+            if (!doc.RootElement.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
+                return "No response from model.";
+
+            var firstCandidate = candidates[0];
+
+            if (!firstCandidate.TryGetProperty("content", out var contentElement))
+                return "No response from model.";
+
+            if (!contentElement.TryGetProperty("parts", out var parts) || parts.GetArrayLength() == 0)
+                return "No response from model.";
+
+            var reply = parts[0].GetProperty("text").GetString();
 
             return reply ?? "No response from model.";
         }
 
-        private void AddChunk(string label, string content)
+        private void AddChunk(string label, string content, string source = "")
         {
             if (string.IsNullOrWhiteSpace(content)) return;
 
             for (int i = 0; i < content.Length; i += ChunkSize)
             {
                 var chunk = content.Substring(i, Math.Min(ChunkSize, content.Length - i));
-                _resumeChunks.Add(new ResumeChunk { Content = $"[{label}] {chunk}" });
+                _resumeChunks.Add(new ResumeChunk
+                {
+                    Label = label,
+                    Source = source,
+                    Content = chunk
+                });
             }
         }
     }

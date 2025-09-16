@@ -11,7 +11,8 @@ public static class ServiceCollectionExtensions
 
         services
         // .AddOpenAiServices(configuration)
-        .AddHuggingFaceServices(configuration)
+        // .AddHuggingFaceServices(configuration)
+        .AddGeminiAiServices(configuration)
         .AddEmailServices(configuration)
         .AddApplicationServices();
 
