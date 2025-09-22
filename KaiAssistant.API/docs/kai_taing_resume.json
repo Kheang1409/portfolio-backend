@@ -6,26 +6,24 @@
       "email": "hangkheangtaing@gmail.com",
       "phone": "+1-641-233-0129",
       "linkedin": "https://www.linkedin.com/in/hang-kheang-taing/",
-      "github": "https://github.com/Kheang1409"
+      "github": "https://github.com/Kheang1409",
+      "portfolio": "https://kaitaing.netlify.app/"
     }
   },
-  "summary": "Senior Systems Engineer with 5+ years of experience building scalable backend systems and enterprise applications across finance, e-commerce, and public sectors. Achieved results including 40% fewer system failures, payroll processing accelerated by one week, and reporting cut from 30 minutes to under 5. Skilled in .NET, SQL optimization, and automation, with a focus on modernizing legacy platforms and mentoring teams.",
+  "summary": "Senior Software Engineer with 3+ years of experience architecting and scaling backend and full-stack systems in finance, e-commerce, and public sectors. Expertise in modernizing legacy systems, optimizing SQL pipelines, and building high-performance, secure, and scalable enterprise applications. Proven track record reducing payroll processing by 7 days, cutting system failures by 40%, and accelerating reporting from 30 minutes to under 5. Skilled mentor and collaborative team leader.",
   "skills": {
     "languagesFrameworks": [
       "C#",
-      ".NET",
       ".NET Core",
       ".NET Framework",
       "ASP.NET Core",
       "ASP.NET MVC",
-      "Web API",
-      "Razor Pages",
       "Blazor",
+      "Razor Pages",
       "LINQ",
-      "T-SQL",
+      "Python",
       "JavaScript",
       "TypeScript",
-      "Python",
       "Dapper",
       "ADO.NET"
     ],
@@ -37,14 +35,16 @@
       "CSS3",
       "Bootstrap",
       "Tailwind",
-      "jQuery"
+      "jQuery",
+      "SignalR",
+      "WebSocket"
     ],
     "architecturePatterns": [
       "Clean Architecture",
-      "DDD",
+      "Domain-Driven Design (DDD)",
       "CQRS",
       "Microservices",
-      "Event-Driven Systems",
+      "Event-Driven Architecture",
       "SAGA",
       "Mediator",
       "Repository Pattern",
@@ -79,8 +79,7 @@
       "Kafka",
       "gRPC",
       "PowerShell",
-      "Agile",
-      "Scrum",
+      "Agile & Scrum",
       "Full-Stack Development",
       "Backend Development",
       "Scalable Architecture",
@@ -94,12 +93,12 @@
       "location": "Phnom Penh, Cambodia",
       "dates": { "from": "2021-09", "to": "2024-04" },
       "highlights": [
-        "Architected a biometric attendance tracking solution using ZK Teco devices, accelerating payroll cycles by 7 days.",
-        "Consolidated dual legacy core banking plugins into a unified .NET application, reducing system crashes by 40% and cutting maintenance hours by 20+ hours/month.",
-        "Developed a real-time notification platform via Telegram Bot API, shortening response times and elevating system reliability to 99%.",
-        "Optimized reporting pipelines with SQL indexing and caching, reducing query load times from minutes to under 2 seconds.",
-        "Implemented secure authentication and CORS in web reporting, eliminating 100% of unauthorized access attempts and ensuring compliance with internal IT audits.",
-        "Mentored two junior developers and authored technical documentation to guarantee seamless maintenance and long-term application continuity."
+        "Automated biometric attendance tracking with ZKTeco devices, accelerating payroll cycles by 7 days.",
+        "Consolidated two legacy banking plugins into a single .NET application, reducing system crashes by 40% and saving 20+ maintenance hours/month.",
+        "Developed real-time Telegram Bot notifications, improving incident response by 50% and maintaining 99% system uptime.",
+        "Redesigned SQL reporting pipelines, reducing query times from minutes to under 2 seconds.",
+        "Secured systems with authentication and CORS, eliminating 100% of unauthorized access attempts and passing IT audits.",
+        "Mentored 2 junior developers, reducing onboarding time by 30% and recurring support tickets by 15%."
       ]
     },
     {
@@ -108,12 +107,12 @@
       "location": "Phnom Penh, Cambodia",
       "dates": { "from": "2021-03", "to": "2021-09" },
       "highlights": [
-        "Engineered Python REST APIs and a custom Odoo ERP interface, streamlining workflows and achieving 99% user satisfaction.",
-        "Integrated Microsoft Teams into Odoo, streamlining in-app scheduling that boosted cross-team meeting adoption by 35% and cut manual coordination by 10+ hours weekly.",
-        "Upgraded Odoo to version 14, enhancing system performance, eCommerce, inventory management, and automation workflows.",
-        "Connected Odoo with ABA PayWay gateway, improving transaction reliability by 30% and enabling smoother processing for 1,000+ monthly payments.",
-        "Launched Khmer Care, a real-time fundraising platform that raised $70.8K and secured partnerships with 30+ organizations.",
-        "Enhanced the Firearms Metrics Platform, reducing reporting time from 30 minutes to under 5 minutes and accelerating data analysis for 200+ law enforcement personnel."
+        "Engineered Python REST APIs and custom Odoo ERP integrations, streamlining workflows with 99% user satisfaction.",
+        "Integrated Microsoft Teams with Odoo, increasing meeting adoption by 35% and saving 10+ hours/week of manual coordination.",
+        "Upgraded Odoo from v13 to v14, improving page load times by 20% and optimizing multiple module workflows.",
+        "Connected Odoo with ABA PayWay, enhancing transaction reliability by 30% for 1,000+ monthly payments.",
+        "Launched Khmer Care fundraising platform, raising $70.8K and partnering with 30+ organizations.",
+        "Optimized Firearms Metrics Platform, reducing reporting time from 30 minutes to under 5 minutes for 200+ law enforcement users."
       ]
     },
     {
@@ -122,10 +121,10 @@
       "location": "Phnom Penh, Cambodia",
       "dates": { "from": "2020-10", "to": "2021-05" },
       "highlights": [
-        "Designed and built a POS system with automated inventory and scale device integration, eliminating manual 99% entry errors.",
-        "Delivered a full-scale Hotel Management System with a real-time booking engine, reducing guest check-in time by 50% and increasing booking efficiency by 30%.",
-        "Constructed a Clinic Management System with scheduling, notifications, and patient tracking, cutting wait times by 45% and improving staff utilization by 20%.",
-        "Orchestrated Odoo ERP setup and customization for an e-commerce solution, enabling real-time order tracking and driving a 15% boost in customer retention."
+        "Developed POS system with automated inventory and scale integration, eliminating 99% of manual entry errors.",
+        "Designed Hotel Management System with booking engine, reducing guest check-in time by 50% and increasing booking efficiency by 30%.",
+        "Delivered Clinic Management System with scheduling, notifications, and patient tracking, reducing wait times by 45%.",
+        "Configured Odoo ERP for e-commerce, enabling real-time order tracking and increasing customer retention by 15%."
       ]
     }
   ],
@@ -140,17 +139,21 @@
       "degree": "Bachelor of Science in Computer Science",
       "institution": "Royal University of Phnom Penh",
       "location": "Phnom Penh, Cambodia",
-      "dates": { "from": "2016", "to": "2020-11" }
+      "dates": { "from": "2016-11", "to": "2020-11" }
     }
   ],
   "projects": [
     {
-      "name": "Angkor Milk Consulting",
-      "description": "Optimized Angkor Milk’s meal reporting app by refining queries, delivering faster insights for 500+ active users within 2 days."
+      "name": "Angkor Milk Meal Reporting App",
+      "description": "Optimized reporting queries for 500+ users, delivering actionable insights within 2 days."
     },
     {
       "name": "Khmer Care Fundraising Platform",
-      "description": "Launched a real-time fundraising platform, raised $70.8K, and partnered with 30+ organizations to support COVID-19 relief."
+      "description": "Developed a real-time fundraising platform, raising $70.8K and establishing partnerships with 30+ organizations."
+    },
+    {
+      "name": "AI-Powered Portfolio",
+      "description": "Enhanced user navigation and workflow efficiency, increasing session duration by 35% and reducing steps by 2 for 150+ weekly visitors."
     }
   ],
   "certifications": [
