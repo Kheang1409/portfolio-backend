@@ -10,7 +10,7 @@
       "portfolio": "https://kaitaing.netlify.app/"
     }
   },
-  "summary": "Senior Software Engineer with 3+ years of experience architecting and scaling backend and full-stack systems in finance, e-commerce, and public sectors. Expertise in modernizing legacy systems, optimizing SQL pipelines, and building high-performance, secure, and scalable enterprise applications. Proven track record reducing payroll processing by 7 days, cutting system failures by 40%, and accelerating reporting from 30 minutes to under 5. Skilled mentor and collaborative team leader.",
+  "summary": "Senior Software Engineer with 4 years of experience architecting and scaling backend and full-stack systems in finance, e-commerce, and public sectors. Expertise in modernizing legacy systems, optimizing SQL pipelines, and building high-performance, secure, and scalable enterprise applications. Proven track record reducing payroll processing by 7 days, cutting system failures by 40%, and accelerating reporting from 30 minutes to under 5. Skilled mentor and collaborative team leader.",
   "skills": {
     "languagesFrameworks": [
       "C#",
@@ -91,7 +91,7 @@
       "role": "Senior .NET Developer - Core Banking",
       "company": "Sahakrinpheap Microfinance PLC",
       "location": "Phnom Penh, Cambodia",
-      "dates": { "from": "2021-09", "to": "2024-04" },
+      "dates": { "from": "2021-09", "to": "2024-05" },
       "highlights": [
         "Automated biometric attendance tracking with ZKTeco devices, accelerating payroll cycles by 7 days.",
         "Consolidated two legacy banking plugins into a single .NET application, reducing system crashes by 40% and saving 20+ maintenance hours/month.",
@@ -133,7 +133,7 @@
       "degree": "Master of Science in Computer Science",
       "institution": "Maharishi International University",
       "location": "Fairfield, Iowa, USA",
-      "dates": { "from": "2024-04", "to": "2026-12" }
+      "dates": { "from": "2024-05", "to": "2026-12" }
     },
     {
       "degree": "Bachelor of Science in Computer Science",
