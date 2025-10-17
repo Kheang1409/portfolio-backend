@@ -8,13 +8,10 @@ public static class ServiceCollectionExtensions
 {
      public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-
         services
-        // .AddOpenAiServices(configuration)
-        // .AddHuggingFaceServices(configuration)
-        .AddGeminiAiServices(configuration)
-        .AddEmailServices(configuration)
-        .AddApplicationServices();
+            .AddGeminiAiServices(configuration)
+            .AddEmailServices(configuration)
+            .AddApplicationServices();
 
         return services;
     }

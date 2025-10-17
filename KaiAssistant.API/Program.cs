@@ -34,7 +34,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 app.UseMiddleware<GlobalExceptionMiddleware>();
-app.UseHttpsRedirection();
+var httpsUrlConfigured = builder.Configuration.GetSection("Kestrel").Exists() ||
+                         (builder.Configuration["ASPNETCORE_URLS"]?.Contains("https://") ?? false);
+if (httpsUrlConfigured)
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("AllowNetlifyApp"); 
 

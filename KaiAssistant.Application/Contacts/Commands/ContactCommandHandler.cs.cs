@@ -14,7 +14,12 @@ public record ContactCommandHandler : IRequestHandler<ContactCommand, bool>
 
     public async Task<bool> Handle(ContactCommand command, CancellationToken cancellationToken)
     {
+        // Send notification email to you
         await _service.SendContactEmailAsync(command.Name, command.Email, command.Message);
+        
+        // Send confirmation email to the sender
+        await _service.SendConfirmationEmailAsync(command.Name, command.Email);
+        
         return true;
     }
 }

@@ -6,10 +6,10 @@ namespace ContactFormApi.Controllers
     [Route("api/healths")]
     public class HealthController : ControllerBase
     {
-        [HttpGet]
+        [HttpHead]
         public IActionResult Get()
         {
-            return Ok(new { status = "Healthy", timestamp = DateTime.UtcNow });
+            return Ok();
         }
     }
 }

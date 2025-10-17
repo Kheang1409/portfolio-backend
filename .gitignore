@@ -21,6 +21,8 @@ secrets.json
 
 # dotenv
 .env
+.env.*
+!.sample.env
 
 # Logs
 *.log

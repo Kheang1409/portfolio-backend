@@ -13,7 +13,7 @@ public class AskAssistantCommandHandler : IRequestHandler<AskAssistantCommand, s
 
     public async Task<string> Handle(AskAssistantCommand command, CancellationToken cancellationToken)
     {
-        var response = await _service.AskQuestionAsync(command.Question);
+        var response = await _service.AskQuestionAsync(command.Question, command.UserId);
         return response;
     }
 }

@@ -1,0 +1,23 @@
+# Exclude local secrets and dev files from Docker build context
+.env
+.env.*
+!.sample.env
+**/bin/
+**/obj/
+**/out/
+**/.vs/
+**/.vscode/
+.git
+.gitignore
+*.user
+*.suo
+*.rsuser
+
+# Node/Front-end artifacts (if any)
+node_modules/
+
+# Logs and temp
+*.log
+logs/
+Log/
+/tmp/
