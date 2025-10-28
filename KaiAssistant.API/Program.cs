@@ -2,6 +2,7 @@ using KaiAssistant.API.Middleware;
 using OpenTelemetry.Metrics;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Infrastructure.Persistence;
+using KaiAssistant.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,15 +15,7 @@ builder.Services.AddOpenTelemetry()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowNetlifyApp", policy =>
-    {
-        policy.WithOrigins("https://kaitaing.netlify.app")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
-    });
-});
+builder.Services.AddConfiguredCors(builder.Configuration);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -37,7 +30,9 @@ app.MapPrometheusScrapingEndpoint();
 
 app.UseSwagger();
 app.UseSwaggerUI();
-    
+
+app.UseCors("AllowNetlifyApp");
+
 app.UseMiddleware<GlobalExceptionMiddleware>();
 var httpsUrlConfigured = builder.Configuration.GetSection("Kestrel").Exists() ||
                          (builder.Configuration["ASPNETCORE_URLS"]?.Contains("https://") ?? false);
@@ -46,10 +41,5 @@ if (httpsUrlConfigured)
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowNetlifyApp"); 
-
-
-
 app.MapControllers();
 app.Run();
-
