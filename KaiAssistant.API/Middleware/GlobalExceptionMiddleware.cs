@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 
-namespace KaiAssistant.Api.Middleware;
+namespace KaiAssistant.API.Middleware;
 
 public class GlobalExceptionMiddleware
 {

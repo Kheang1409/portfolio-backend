@@ -102,6 +102,22 @@ Environment variables override appsettings values for security.
 - ✅ No secrets are hardcoded in source code
 - ✅ Docker image doesn't include `.env` files
 
+## Docker Compose (local)
+
+A `docker-compose.yml` is provided at the repository root to run the API service locally.
+
+Quick start:
+
+1. Copy `.env` at repository root and fill secrets (SMTP, Gemini API key, etc.).
+
+2. Build and run the service:
+
+   docker compose up --build
+
+By default the API is published on the port defined by `API_HTTP_PORT` in `.env` (default `5000`).
+
+The `docs` folder from `KaiAssistant.API` is mounted read-only into the container as `/app/docs` so resume data is available to the service.
+
 ## License
 
 MIT License

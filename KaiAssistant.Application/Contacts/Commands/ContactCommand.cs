@@ -6,4 +6,4 @@ public record ContactCommand(
     string Name ,
      string Email ,
      string Message
-) : IRequest<bool>;
+) : IRequest;

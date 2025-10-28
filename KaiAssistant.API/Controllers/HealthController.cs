@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 
-namespace ContactFormApi.Controllers
+namespace KaiAssistant.API.Controllers
 {
     [ApiController]
-    [Route("api/healths")]
+    [Route("health")]
     public class HealthController : ControllerBase
     {
         [HttpHead]
+        [HttpGet]
         public IActionResult Get()
         {
             return Ok();

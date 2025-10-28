@@ -9,6 +9,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.6" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.6.0-alpha.1" />
+  <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.9.0" />
+  <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.6.0" />
+  <!-- Note: explicit OpenTelemetry core package removed to allow NuGet to resolve compatible versions for the extensions. -->
   </ItemGroup>
 
   <ItemGroup>

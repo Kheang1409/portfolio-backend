@@ -7,19 +7,22 @@ public class EmailSettings
     public string SenderEmail { get; private set; } = string.Empty;
     public string RecieverEmail { get; private set; } = string.Empty;
     public string SenderPassword { get; private set; } = string.Empty;
+    public bool Enabled { get; private set; } = true;
 
     public EmailSettings(
         string smtpServer,
         int port,
         string senderEmail,
         string recieverEmail,
-        string senderPassword)
+        string senderPassword,
+        bool enabled = true)
     {
         SmtpServer = smtpServer;
         Port = port;
         SenderEmail = senderEmail;
         RecieverEmail = recieverEmail;
         SenderPassword = senderPassword;
+        Enabled = enabled;
     }
 
 }
