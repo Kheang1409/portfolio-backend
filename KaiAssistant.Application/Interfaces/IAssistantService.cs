@@ -1,5 +1,3 @@
-using System.Threading;
-
 namespace KaiAssistant.Application.Interfaces;
 
 public interface IAssistantService

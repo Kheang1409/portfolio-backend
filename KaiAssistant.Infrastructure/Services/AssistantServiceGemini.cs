@@ -51,6 +51,44 @@ public class AssistantServiceGemini : IAssistantService
         _inFlightObservable = _meter.CreateObservableGauge<long>("assistant.requests.inflight", () => new[] { new Measurement<long>(Interlocked.Read(ref _inFlightCount)) });
     }
 
+    private object BuildGenerationConfig(string question)
+    {
+        double temperature = question.Length < 80 ? 0.3 : 0.45;
+        int topK = 20;
+        double topP = 0.85;
+        int maxOutputTokens = question.Length < 100 ? 512 : 768;
+        int candidateCount = 1;
+
+        var tEnv = Environment.GetEnvironmentVariable("GEMINI_TEMPERATURE");
+        if (!string.IsNullOrWhiteSpace(tEnv) && double.TryParse(tEnv, out var tParsed))
+            temperature = Math.Clamp(tParsed, 0.0, 2.0);
+
+        var kEnv = Environment.GetEnvironmentVariable("GEMINI_TOPK");
+        if (!string.IsNullOrWhiteSpace(kEnv) && int.TryParse(kEnv, out var kParsed) && kParsed >= 0)
+            topK = kParsed;
+
+        var pEnv = Environment.GetEnvironmentVariable("GEMINI_TOPP");
+        if (!string.IsNullOrWhiteSpace(pEnv) && double.TryParse(pEnv, out var pParsed))
+            topP = Math.Clamp(pParsed, 0.0, 1.0);
+
+        var maxEnv = Environment.GetEnvironmentVariable("GEMINI_MAX_OUTPUT_TOKENS");
+        if (!string.IsNullOrWhiteSpace(maxEnv) && int.TryParse(maxEnv, out var maxParsed) && maxParsed > 0)
+            maxOutputTokens = Math.Min(maxParsed, 2048);
+
+        var candEnv = Environment.GetEnvironmentVariable("GEMINI_CANDIDATE_COUNT");
+        if (!string.IsNullOrWhiteSpace(candEnv) && int.TryParse(candEnv, out var candParsed) && candParsed > 0)
+            candidateCount = Math.Min(candParsed, 5);
+
+        return new
+        {
+            temperature,
+            topK,
+            topP,
+            maxOutputTokens,
+            candidateCount
+        };
+    }
+
     public void LoadResume(string filePath)
     {
         if (!File.Exists(filePath))
@@ -166,14 +204,7 @@ public class AssistantServiceGemini : IAssistantService
                 }
             },
             contents,
-            generationConfig = new
-            {
-                temperature = 0.35,
-                topK = 40,
-                topP = 0.9,
-                maxOutputTokens = 1024,
-                candidateCount = 1
-            },
+            generationConfig = BuildGenerationConfig(question),
             safetySettings = new[]
             {
                 new { category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_MEDIUM_AND_ABOVE" },

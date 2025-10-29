@@ -1,4 +1,14 @@
-# Exclude local secrets and dev files from Docker build context
+bin
+obj
+*.user
+*.suo
+*.log
+.git
+.gitignore
+.env
+.sample.env
+Dockerfile
+docker-compose.yml# Exclude local secrets and dev files from Docker build context
 .env
 .env.*
 !.sample.env
