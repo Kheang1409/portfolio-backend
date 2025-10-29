@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,18 +14,20 @@ namespace KaiAssistant.Infrastructure.Extensions
             if (services == null) throw new ArgumentNullException(nameof(services));
             if (configuration == null) throw new ArgumentNullException(nameof(configuration));
 
-            var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+            string[]? allowedOrigins = null;
+
+            var env = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS");
+            if (!string.IsNullOrWhiteSpace(env))
+            {
+                allowedOrigins = env.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                     .Select(s => s.Trim())
+                                     .Where(s => !string.IsNullOrWhiteSpace(s))
+                                     .ToArray();
+            }
 
             if (allowedOrigins == null || allowedOrigins.Length == 0)
             {
-                var env = configuration["ALLOWED_ORIGINS"];
-                if (!string.IsNullOrWhiteSpace(env))
-                {
-                    allowedOrigins = env.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                                         .Select(s => s.Trim())
-                                         .Where(s => !string.IsNullOrWhiteSpace(s))
-                                         .ToArray();
-                }
+                allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
             }
 
             if (allowedOrigins == null || allowedOrigins.Length == 0)
