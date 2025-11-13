@@ -1,5 +1,16 @@
 bin
 obj
+**/bin
+**/obj
+*.user
+*.suo
+.vs
+.DS_Store
+.env
+docker-compose.yml
+Dockerfile
+*.logbin
+obj
 *.user
 *.suo
 *.log
