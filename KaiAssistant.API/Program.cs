@@ -1,8 +1,9 @@
 using KaiAssistant.API.Middleware;
 using OpenTelemetry.Metrics;
 using KaiAssistant.Application.Interfaces;
+using KaiAssistant.Application.Extensions;
 using KaiAssistant.Infrastructure.Persistence;
-using KaiAssistant.Infrastructure.Extensions;
+using KaiAssistant.API.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +13,8 @@ builder.Services.AddOpenTelemetry()
         .AddAspNetCoreInstrumentation()
         .AddPrometheusExporter());
 
-builder.Services.AddEndpointsApiExplorer();
+
+builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddConfiguredCors(builder.Configuration);
@@ -28,9 +30,11 @@ var assistantService = app.Services.GetRequiredService<IAssistantService>();
 await assistantService.LoadResumeFromDatabaseAsync();
 app.MapPrometheusScrapingEndpoint();
 
-app.UseSwagger();
-app.UseSwaggerUI();
-
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.UseCors("AllowNetlifyApp");
 
 app.UseMiddleware<GlobalExceptionMiddleware>();

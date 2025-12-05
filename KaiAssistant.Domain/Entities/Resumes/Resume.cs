@@ -15,15 +15,31 @@ public class Resume
     public Personals? Personals { get; set; }
     public string Summary { get; set; } = string.Empty;
 
-    public List<string>? Skills { get; set; }
+    private List<string> _skills = new();
+    public IReadOnlyCollection<string> Skills => _skills.AsReadOnly();
 
-    public HashSet<Experience> Experiences { get; set; } = new();
+    public void AddSkill(string skill)
+    {
+        if (string.IsNullOrWhiteSpace(skill))
+            return;
 
-    public HashSet<Project> Projects { get; set; } = new();
+        if (!_skills.Contains(skill))
+            _skills.Add(skill);
+    }
 
-    public HashSet<Education> Educations { get; set; } = new();
+    public bool RemoveSkill(string skill) => _skills.Remove(skill);
 
-    public HashSet<Certification> Certifications { get; set; } = new();
+    private readonly HashSet<Experience> _experiences = new();
+    public IReadOnlyCollection<Experience> Experiences => _experiences;
+
+    private readonly HashSet<Project> _projects = new();
+    public IReadOnlyCollection<Project> Projects => _projects;
+
+    private readonly HashSet<Education> _educations = new();
+    public IReadOnlyCollection<Education> Educations => _educations;
+
+    private readonly HashSet<Certification> _certifications = new();
+    public IReadOnlyCollection<Certification> Certifications => _certifications;
 
     public Resume() { }
 }

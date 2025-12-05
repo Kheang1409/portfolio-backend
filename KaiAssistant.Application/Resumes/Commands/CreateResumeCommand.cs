@@ -1,4 +1,3 @@
-using KaiAssistant.Domain.Entities;
 using KaiAssistant.Domain.Entities.Resumes;
 using MediatR;
 

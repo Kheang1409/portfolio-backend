@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using Xunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using KaiAssistant.Application.Interfaces;
+using KaiAssistant.Infrastructure.Persistence;
 using FluentAssertions;
 
 namespace KaiAssistant.Tests;

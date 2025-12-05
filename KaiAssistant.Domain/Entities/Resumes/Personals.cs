@@ -2,10 +2,10 @@ namespace KaiAssistant.Domain.Entities.Resumes;
 
 public record Personals
 {
-    public string LegalName { get; private set; } = string.Empty;
-    public string PreferredName { get; private set; } = string.Empty;
-    public string Phone { get; private set; } = string.Empty;
-    public string Linkedin { get; private set; } = string.Empty;
-    public string Github { get; private set; } = string.Empty;
-    public string Portfolio { get; private set; } = string.Empty;
+    public required string LegalName { get; init; }
+    public string PreferredName { get; init; } = string.Empty;
+    public string Phone { get; init; } = string.Empty;
+    public string Linkedin { get; init; } = string.Empty;
+    public string Github { get; init; } = string.Empty;
+    public string Portfolio { get; init; } = string.Empty;
 }

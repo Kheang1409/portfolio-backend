@@ -5,10 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using KaiAssistant.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using Polly;
-using Polly.Extensions.Http;
-using System.Net.Http;
 using System.Net;
-using System.Diagnostics;
 
 namespace KaiAssistant.Infrastructure.Extensions;
 

@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="3d859f01-33db-4e9f-91e1-b9088bcc6de2" name="ASUS@KAI 2025-12-02 18:11:04" runUser="KAI\ASUS" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2025-12-02T18:11:04.8466723-06:00" queuing="2025-12-02T18:11:04.8466730-06:00" start="2025-12-02T18:11:03.6279481-06:00" finish="2025-12-02T18:11:04.8518689-06:00" />
+  <TestSettings name="default" id="765c0ef1-37ef-4804-baef-836d43420dde">
+    <Deployment runDeploymentRoot="ASUS_KAI_2025-12-02_18_11_04" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="b7253c0e-80e8-4bb8-8bc9-962d0b0bbf14" testId="632c2ae7-fa51-ed6b-05f9-0fd8da98a7a6" testName="KaiAssistant.Tests.ServiceRegistrationTests.ServiceProvider_Resolves_EssentialServices" computerName="KAI" duration="00:00:00.2710734" startTime="2025-12-02T18:11:04.7122982-06:00" endTime="2025-12-02T18:11:04.7123328-06:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b7253c0e-80e8-4bb8-8bc9-962d0b0bbf14" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="KaiAssistant.Tests.ServiceRegistrationTests.ServiceProvider_Resolves_EssentialServices" storage="d:\personal\my achievement\self\portfolio\backend\kaiassistant.tests\bin\debug\net10.0\kaiassistant.tests.dll" id="632c2ae7-fa51-ed6b-05f9-0fd8da98a7a6">
+      <Execution id="b7253c0e-80e8-4bb8-8bc9-962d0b0bbf14" />
+      <TestMethod codeBase="D:\Personal\My Achievement\Self\Portfolio\backend\KaiAssistant.Tests\bin\Debug\net10.0\KaiAssistant.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="KaiAssistant.Tests.ServiceRegistrationTests" name="ServiceProvider_Resolves_EssentialServices" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="632c2ae7-fa51-ed6b-05f9-0fd8da98a7a6" executionId="b7253c0e-80e8-4bb8-8bc9-962d0b0bbf14" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="1" executed="1" passed="1" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.8.0+6438bb880a (64-bit .NET 10.0.0)&#xD;
+[xUnit.net 00:00:00.14]   Discovering: KaiAssistant.Tests&#xD;
+[xUnit.net 00:00:00.20]   Discovered:  KaiAssistant.Tests&#xD;
+[xUnit.net 00:00:00.20]   Starting:    KaiAssistant.Tests&#xD;
+[xUnit.net 00:00:00.54]   Finished:    KaiAssistant.Tests&#xD;
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>
