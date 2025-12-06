@@ -1,6 +1,5 @@
 using KaiAssistant.API.Middleware;
 using OpenTelemetry.Metrics;
-using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Extensions;
 using KaiAssistant.Infrastructure.Persistence;
 using KaiAssistant.API.Extensions;
@@ -19,15 +18,19 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddConfiguredCors(builder.Configuration);
 
+builder.Services.AddSingleton<IExceptionHandler, ArgumentExceptionHandler>();
+builder.Services.AddSingleton<IExceptionHandler, UnauthorizedAccessExceptionHandler>();
+builder.Services.AddSingleton<IExceptionHandler, InvalidOperationExceptionHandler>();
+builder.Services.AddSingleton<IExceptionHandler, NotFoundExceptionHandler>();
+builder.Services.AddSingleton<IExceptionHandler, RequestTimeoutExceptionHandler>();
+builder.Services.AddSingleton<IExceptionHandler, UnhandledExceptionHandler>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
-var assistantService = app.Services.GetRequiredService<IAssistantService>();
-await assistantService.LoadResumeFromDatabaseAsync();
 app.MapPrometheusScrapingEndpoint();
 
 if (app.Environment.IsDevelopment())
@@ -35,6 +38,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
 app.UseCors("AllowNetlifyApp");
 
 app.UseMiddleware<GlobalExceptionMiddleware>();

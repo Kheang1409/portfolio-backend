@@ -16,14 +16,14 @@ public class ServiceRegistrationTests
         var inMemorySettings = new Dictionary<string, string?>
         {
             ["GeminiSettings:ApiKey"] = "test",
-            ["GeminiSettings:ModelName"] = "test-model",
+            ["GeminiSettings:ModelNames:0"] = "test-model",
             ["GeminiSettings:Endpoint"] = "https://api.test/",
             ["MongoDB:ConnectionString"] = "mongodb://localhost:27017",
             ["MongoDB:DatabaseName"] = "testdb",
             ["EmailSettings:SmtpServer"] = "smtp.test",
             ["EmailSettings:Port"] = "25",
             ["EmailSettings:SenderEmail"] = "from@test",
-            ["EmailSettings:RecieverEmail"] = "to@test",
+            ["EmailSettings:ReceiverEmail"] = "to@test",
             ["EmailSettings:SenderPassword"] = "pass"
         };
 

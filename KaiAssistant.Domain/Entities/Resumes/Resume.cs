@@ -6,6 +6,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace KaiAssistant.Domain.Entities.Resumes;
+[BsonIgnoreExtraElements]
 public class Resume
 {
     [BsonId]
@@ -15,31 +16,50 @@ public class Resume
     public Personals? Personals { get; set; }
     public string Summary { get; set; } = string.Empty;
 
-    private List<string> _skills = new();
-    public IReadOnlyCollection<string> Skills => _skills.AsReadOnly();
+    public List<string> Skills { get; internal set; } = new();
 
     public void AddSkill(string skill)
     {
         if (string.IsNullOrWhiteSpace(skill))
             return;
 
-        if (!_skills.Contains(skill))
-            _skills.Add(skill);
+        if (!Skills.Contains(skill))
+            Skills.Add(skill);
     }
 
-    public bool RemoveSkill(string skill) => _skills.Remove(skill);
+    public bool RemoveSkill(string skill) => Skills.Remove(skill);
 
-    private readonly HashSet<Experience> _experiences = new();
-    public IReadOnlyCollection<Experience> Experiences => _experiences;
+    public List<Experience> Experiences { get; internal set; } = new();
 
-    private readonly HashSet<Project> _projects = new();
-    public IReadOnlyCollection<Project> Projects => _projects;
+    public void AddExperience(Experience experience)
+    {
+        if (experience != null)
+            Experiences.Add(experience);
+    }
 
-    private readonly HashSet<Education> _educations = new();
-    public IReadOnlyCollection<Education> Educations => _educations;
+    public List<Project> Projects { get; internal set; } = new();
 
-    private readonly HashSet<Certification> _certifications = new();
-    public IReadOnlyCollection<Certification> Certifications => _certifications;
+    public void AddProject(Project project)
+    {
+        if (project != null)
+            Projects.Add(project);
+    }
+
+    public List<Education> Educations { get; internal set; } = new();
+
+    public void AddEducation(Education education)
+    {
+        if (education != null)
+            Educations.Add(education);
+    }
+
+    public List<Certification> Certifications { get; internal set; } = new();
+
+    public void AddCertification(Certification certification)
+    {
+        if (certification != null)
+            Certifications.Add(certification);
+    }
 
     public Resume() { }
 }

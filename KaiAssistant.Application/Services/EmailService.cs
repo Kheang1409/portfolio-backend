@@ -221,7 +221,7 @@ public class EmailService : IEmailService
                                             
                                             <p style="margin: 20px 0 0; color: #1f2937; font-size: 15px; font-weight: 600;">
                                                 Best regards,<br>
-                                                <span style="color: #10b981; font-size: 18px;">Kai Taing</span>
+                                                <span style="color: #10b981; font-size: 18px;">Hang Kheang Taing</span>
                                             </p>
                                         </td>
                                     </tr>
@@ -237,7 +237,7 @@ public class EmailService : IEmailService
                                                             Please do not reply directly to this message.
                                                         </p>
                                                         <p style="margin: 10px 0 0; color: #9ca3af; font-size: 12px;">
-                                                            © {DateTime.UtcNow.Year} Kai Taing. All rights reserved.
+                                                            © {DateTime.UtcNow.Year} Hang Kheang Taing. All rights reserved.
                                                         </p>
                                                     </td>
                                                 </tr>
