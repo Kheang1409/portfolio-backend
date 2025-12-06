@@ -73,7 +73,7 @@ public class AssistantService : IAssistantService
         var genConfig = _promptBuilder.BuildGenerationConfig(question);
         var genConfigNode = JsonSerializer.SerializeToNode(genConfig) as JsonObject ?? new JsonObject();
 
-        // MCP-compliant request: contents array with role/parts structure
+        // Gemini payload: contents array with role/parts structure
         var contentsArray = new JsonArray(
             new JsonObject
             {

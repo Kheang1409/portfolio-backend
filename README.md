@@ -5,7 +5,6 @@
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-17%2F17%20passing-brightgreen)](tests)
-[![MCP Compliant](https://img.shields.io/badge/MCP-compliant-success)](MCP_DEVELOPER_GUIDE.md)
 
 ## 📋 Table of Contents
 
@@ -30,7 +29,7 @@
 
 ## 🎯 Overview
 
-KaiAssistant is a sophisticated backend API designed for Kai Taing's professional portfolio website. It provides AI-powered conversational capabilities using Google Gemini, allowing visitors to interact with an intelligent assistant that answers questions about Kai's professional background, skills, and experience using **Retrieval-Augmented Generation (RAG)**.
+KaiAssistant is a sophisticated backend API designed for Kai Taing's professional portfolio website. It provides AI-powered conversational capabilities using Google Gemini, allowing visitors to interact with an intelligent assistant that answers questions about Kai's professional background, skills, and experience using **Retrieval-Augmented Generation (RAG)**—no MCP dependency required.
 
 ### Key Capabilities
 
@@ -46,7 +45,6 @@ KaiAssistant is a sophisticated backend API designed for Kai Taing's professiona
 
 ### 🤖 AI Assistant (Gemini Integration)
 
-- **MCP-Compliant**: Follows Model Context Protocol for AI interactions
 - **Multi-Model Fallback**: Automatic failover between `gemini-2.0-flash` and `gemini-1.5-flash`
 - **Smart RAG**: Keyword-based retrieval of relevant resume chunks from MongoDB
 - **Privacy Controls**: Configurable personal detail filtering
@@ -408,9 +406,13 @@ graph LR
 2. **Chunk Retrieval**: Query MongoDB for relevant resume sections
 3. **Context Ranking**: Score chunks by relevance (0-10 scale)
 4. **Context Limiting**: Keep top 8 chunks within token limits
-5. **Prompt Construction**: Build MCP-compliant request
+5. **Prompt Construction**: Build Gemini request payload
 6. **AI Generation**: Send to Gemini with fallback
 7. **Response Parsing**: Extract and return clean text
+
+### Protocol
+
+- Uses native Gemini JSON payloads (`contents` + `generationConfig`); no MCP layer is required.
 
 ### Resume Data Structure
 
@@ -454,31 +456,6 @@ ModelNames: [
 
 If the first model fails (rate limit, error), automatically tries the next.
 
-### MCP Compliance
-
-All Gemini requests follow **Model Context Protocol (MCP)**:
-
-```json
-{
-  "contents": [
-    {"role": "user", "parts": [{"text": "System prompt..."}]},
-    {"role": "user", "parts": [{"text": "Resume context + question"}]}
-  ],
-  "generationConfig": {
-    "temperature": 0.4,
-    "topK": 20,
-    "topP": 0.85,
-    "maxOutputTokens": 768,
-    "candidateCount": 1
-  },
-  "safetySettings": [...]
-}
-```
-
-> **📖 MCP Details**: See [MCP_DEVELOPER_GUIDE.md](MCP_DEVELOPER_GUIDE.md)
-
----
-
 ## 🧪 Testing
 
 ### Run All Tests
@@ -504,7 +481,7 @@ dotnet test --filter "Name~AskQuestionAsync"
 | Category              | Tests  | Coverage                                     |
 | --------------------- | ------ | -------------------------------------------- |
 | **Unit Tests**        | 10     | AssistantService, Validation, Error Handling |
-| **Integration Tests** | 7      | Full RAG flow, MCP compliance, End-to-end    |
+| **Integration Tests** | 7      | Full RAG flow, end-to-end                    |
 | **Total**             | **17** | **100% passing** ✅                          |
 
 ### Key Test Scenarios
@@ -513,7 +490,6 @@ dotnet test --filter "Name~AskQuestionAsync"
 ✅ Empty questions → validation errors  
 ✅ No resume data → graceful degradation  
 ✅ Gateway failures → error messages  
-✅ MCP payload validation  
 ✅ CamelCase config verification  
 ✅ Contents array ordering  
 ✅ Safety settings compliance
@@ -712,7 +688,7 @@ KaiAssistant/
 │   │       └── ContactCommandHandler.cs
 │   ├── Services/
 │   │   ├── AssistantService.cs          # RAG implementation
-│   │   ├── AiPromptBuilder.cs           # MCP payload builder
+│   │   ├── AiPromptBuilder.cs           # Gemini payload builder
 │   │   ├── EmailService.cs              # Email delivery
 │   │   ├── GeminiAiModelGatewayAdapter.cs
 │   │   └── ResumeContextProvider.cs     # Resume chunk retrieval
@@ -756,7 +732,6 @@ KaiAssistant/
 │
 ├── Dockerfile                           # 🐳 Container definition
 ├── KaiAssistant.sln                    # Solution file
-├── MCP_DEVELOPER_GUIDE.md              # MCP documentation
 ├── SECURITY_SETUP.md                   # Security guide
 └── README.md                           # This file
 ```
@@ -796,11 +771,10 @@ Contributions are welcome! Please follow these guidelines:
 
 ## 📚 Documentation
 
-| Document                                                 | Description                                   |
-| -------------------------------------------------------- | --------------------------------------------- |
-| [MCP_DEVELOPER_GUIDE.md](MCP_DEVELOPER_GUIDE.md)         | Model Context Protocol implementation details |
-| [SECURITY_SETUP.md](SECURITY_SETUP.md)                   | Complete security configuration guide         |
-| [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) | Recent improvements and architecture changes  |
+| Document                                                 | Description                                  |
+| -------------------------------------------------------- | -------------------------------------------- |
+| [SECURITY_SETUP.md](SECURITY_SETUP.md)                   | Complete security configuration guide        |
+| [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) | Recent improvements and architecture changes |
 
 ---
 
@@ -898,7 +872,7 @@ For questions, issues, or feature requests:
 
 1. **GitHub Issues**: [Create an issue](https://github.com/Kheang1409/ContactFormApi/issues)
 2. **Email**: contact@kaitaing.com
-3. **Documentation**: Check [MCP_DEVELOPER_GUIDE.md](MCP_DEVELOPER_GUIDE.md)
+3. **Documentation**: See [SECURITY_SETUP.md](SECURITY_SETUP.md) and [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)
 
 ---
 

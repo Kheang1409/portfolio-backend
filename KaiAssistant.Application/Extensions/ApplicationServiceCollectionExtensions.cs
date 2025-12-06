@@ -23,7 +23,7 @@ public static class ApplicationServiceCollectionExtensions
         });
         services.AddValidatorsFromAssemblyContaining<AskAssistantCommandValidator>();
         services.AddValidatorsFromAssemblyContaining<ContactCommandValidator>();
-        // AI/MCP related services
+        // AI services
         services.AddSingleton<IAiPromptBuilder, AiPromptBuilder>();
         services.AddScoped<IResumeContextProvider, ResumeContextProvider>();
         services.AddScoped<IAiModelGateway, GeminiAiModelGatewayAdapter>();
