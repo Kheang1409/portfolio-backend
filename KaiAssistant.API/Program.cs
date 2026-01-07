@@ -1,10 +1,15 @@
+using Amazon.Lambda.AspNetCoreServer;
+using Amazon.Lambda.AspNetCoreServer.Hosting;
+using KaiAssistant.API.Extensions;
 using KaiAssistant.API.Middleware;
-using OpenTelemetry.Metrics;
 using KaiAssistant.Application.Extensions;
 using KaiAssistant.Infrastructure.Persistence;
-using KaiAssistant.API.Extensions;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Enable Lambda runtime integration for API Gateway HTTP API; keeps controllers intact.
+builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
 builder.Services.AddOpenTelemetry()
     .WithMetrics(mb => mb

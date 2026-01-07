@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: KaiAssistant API - Lambda + API Gateway
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: dotnet10
+    Architectures:
+      - x86_64
+
+Parameters:
+  MongoConnectionString:
+    Type: String
+    NoEcho: true
+    Description: MongoDB Atlas connection string
+
+  MongoDatabaseName:
+    Type: String
+    Default: kai-data-model
+    Description: MongoDB database name
+
+  AllowedOrigins:
+    Type: String
+    Default: http://localhost:3000
+    Description: CORS allowed origins
+
+  SmtpServer:
+    Type: String
+    Default: smtp.gmail.com
+    Description: SMTP server for email
+
+  SmtpPort:
+    Type: String
+    Default: "465"
+    Description: SMTP port
+
+  SmtpSenderEmail:
+    Type: String
+    Description: SMTP sender email address
+
+  SmtpReceiverEmail:
+    Type: String
+    Description: SMTP receiver email address
+
+  SmtpSenderPassword:
+    Type: String
+    NoEcho: true
+    Description: SMTP sender password
+
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: Google Gemini API key
+
+Resources:
+  KaiAssistantFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: kaiassistant-api
+      Handler: KaiAssistant.API
+      CodeUri: publish/
+      PackageType: Zip
+      Description: KaiAssistant API Lambda Function
+      Environment:
+        Variables:
+          MONGODB_CONNECTIONSTRING: !Ref MongoConnectionString
+          MONGODB_DATABASE: !Ref MongoDatabaseName
+          EmailSettings__SmtpServer: !Ref SmtpServer
+          EmailSettings__Port: !Ref SmtpPort
+          EmailSettings__SenderEmail: !Ref SmtpSenderEmail
+          EmailSettings__ReceiverEmail: !Ref SmtpReceiverEmail
+          EmailSettings__SenderPassword: !Ref SmtpSenderPassword
+          EmailSettings__Enabled: "true"
+          GeminiSettings__ApiKey: !Ref GeminiApiKey
+          GeminiSettings__ModelNames__0: "gemini-2.5-flash:generateContent"
+          GeminiSettings__ModelNames__1: "gemini-2.5-flash-lite:generateContent"
+          GeminiSettings__Endpoint: "https://generativelanguage.googleapis.com/v1beta/models/"
+          GeminiSettings__SystemPrompt: "You are Mr.Taing's professional AI assistant. Represent Mr.Taing professionally and help visitors learn about his background, skills, and experience."
+          GeminiSettings__PromptMaxChars: "10000"
+          GeminiSettings__IncludePersonalDetails: "true"
+          GeminiSettings__Temperature: "0.4"
+          GeminiSettings__TopK: "20"
+          GeminiSettings__TopP: "0.85"
+          GeminiSettings__MaxOutputTokens: "768"
+          GeminiSettings__CandidateCount: "1"
+          Cors__AllowedOrigins__0: !Ref AllowedOrigins
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            ApiId: !Ref KaiAssistantApi
+
+  KaiAssistantApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigins
+        AllowHeaders:
+          - "*"
+        AllowMethods:
+          - "*"
+        MaxAge: 600
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${KaiAssistantApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  FunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt KaiAssistantFunction.Arn
