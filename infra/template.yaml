@@ -60,8 +60,7 @@ Resources:
     Properties:
       FunctionName: kaiassistant-api
       Handler: KaiAssistant.API
-      CodeUri: publish/
-      PackageType: Zip
+      CodeUri: ../KaiAssistant.API/
       Description: KaiAssistant API Lambda Function
       Environment:
         Variables:

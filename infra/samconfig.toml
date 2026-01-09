@@ -5,5 +5,5 @@ stack_name = "kaiassistant-api-stack"
 s3_prefix = "kaiassistant-api"
 region = "us-east-1"
 confirm_changeset = false
-capabilities = "CAPABILITY_IAM"
+capabilities = "CAPABILITY_IAM,CAPABILITY_NAMED_IAM"
 image_repositories = []

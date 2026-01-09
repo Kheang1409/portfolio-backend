@@ -1,10 +1,12 @@
 # KaiAssistant API
 
-> A production-ready ASP.NET Core Web API with AI-powered assistant capabilities for Kai Taing's professional portfolio
+> A production-ready ASP.NET Core Web API with AI-powered assistant capabilities for Kai Taing's professional portfolio, deployed on AWS Lambda
 
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-17%2F17%20passing-brightgreen)](tests)
+[![AWS Lambda](https://img.shields.io/badge/AWS-Lambda-orange)](https://aws.amazon.com/lambda/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-3.0.0-green)](https://www.mongodb.com/)
 
 ## 📋 Table of Contents
 
@@ -19,6 +21,8 @@
 - [AI Assistant (RAG)](#ai-assistant-rag)
 - [Testing](#testing)
 - [Deployment](#deployment)
+- [CI/CD Pipeline](#cicd-pipeline)
+- [Infrastructure](#infrastructure)
 - [Security](#security)
 - [Monitoring](#monitoring)
 - [Project Structure](#project-structure)
@@ -82,6 +86,9 @@ This project follows **Domain-Driven Design (DDD)** and **Clean Architecture** p
 ┌─────────────────────────────────────────────────────────┐
 │                     KaiAssistant.API                    │
 │  (Controllers, Middleware, HTTP Concerns)               │
+│  - ASP.NET Core Web API                                 │
+│  - AWS Lambda Hosting                                    │
+│  - API Gateway Integration                              │
 └────────────────────┬────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────┐
@@ -140,7 +147,8 @@ This project follows **Domain-Driven Design (DDD)** and **Clean Architecture** p
 - **xUnit 2.6.2** - Test framework
 - **FluentAssertions 6.9.0** - Fluent assertion library
 - **Moq 4.18.4** - Mocking framework
-- **Mongo2Go 4.0.0** - In-memory MongoDB for testing
+- **Mongo2Go 3.2.0** - In-memory MongoDB for testing
+- **Microsoft.NET.Test.Sdk 18.0.1** - Test SDK
 
 ### Observability
 
@@ -148,9 +156,11 @@ This project follows **Domain-Driven Design (DDD)** and **Clean Architecture** p
 - **Prometheus** - Metrics collection
 - **Serilog-compatible** - Structured logging
 
-### DevOps
+### DevOps & Infrastructure
 
-- **Docker** - Containerization
+- **AWS SAM (Serverless Application Model)** - Infrastructure as Code
+- **GitHub Actions** - CI/CD pipeline
+- **Docker** - Containerization for development
 - **Multi-stage builds** - Optimized container images
 
 ---
@@ -161,7 +171,9 @@ This project follows **Domain-Driven Design (DDD)** and **Clean Architecture** p
 - **MongoDB** (Local or Atlas)
 - **Google Gemini API Key** ([Get Key](https://makersuite.google.com/app/apikey))
 - **SMTP Server** (Gmail, SendGrid, etc.)
-- **Docker** (Optional, for containerization)
+- **AWS CLI** (For deployment)
+- **AWS SAM CLI** (For local testing and deployment)
+- **Docker** (Optional, for local containerization)
 
 ---
 
@@ -215,10 +227,11 @@ dotnet restore
 dotnet build
 ```
 
-### 5. Run the API
+### 5. Run Locally
 
 ```bash
-dotnet run --project KaiAssistant.API
+cd KaiAssistant.API
+dotnet run
 ```
 
 The API will be available at:
@@ -226,6 +239,16 @@ The API will be available at:
 - **HTTP**: `http://localhost:5000`
 - **HTTPS**: `https://localhost:5001`
 - **Swagger UI**: `http://localhost:5000/swagger` (Development only)
+
+### 6. Test with SAM Local (Optional)
+
+```bash
+# Build with SAM
+sam build --template infra/template.yaml
+
+# Run locally
+sam local start-api --template infra/template.yaml
+```
 
 ---
 
@@ -271,6 +294,16 @@ The API will be available at:
 
 ### Environment Variables
 
+| Variable                   | Description                            | Required |
+| -------------------------- | -------------------------------------- | -------- |
+| `MONGODB_CONNECTIONSTRING` | MongoDB connection string              | Yes      |
+| `MONGODB_DATABASE`         | Database name                          | Yes      |
+| `GEMINI_API_KEY`           | Google Gemini API key                  | Yes      |
+| `EMAIL_SENDER_EMAIL`       | SMTP sender email                      | Yes      |
+| `EMAIL_RECEIVER_EMAIL`     | Email recipient                        | Yes      |
+| `EMAIL_SENDER_PASSWORD`    | SMTP password                          | Yes      |
+| `CORS_ALLOWED_ORIGINS`     | Allowed CORS origins (comma-separated) | No       |
+
 Override any setting using environment variables:
 
 ```bash
@@ -281,6 +314,20 @@ EMAIL__SMTPSERVER=smtp.gmail.com
 ```
 
 **Naming Convention**: Use double underscores (`__`) for nested properties.
+
+### AWS SAM Parameters
+
+See `infra/template.yaml` for all configurable parameters:
+
+- **MongoConnectionString**: MongoDB Atlas connection string
+- **MongoDatabaseName**: Database name (default: kai-data-model)
+- **AllowedOrigins**: CORS allowed origins
+- **SmtpServer**: SMTP server (default: smtp.gmail.com)
+- **SmtpPort**: SMTP port (default: 465)
+- **SmtpSenderEmail**: Sender email
+- **SmtpReceiverEmail**: Receiver email
+- **SmtpSenderPassword**: Sender password
+- **GeminiApiKey**: Gemini API key
 
 ---
 
@@ -498,123 +545,155 @@ dotnet test --filter "Name~AskQuestionAsync"
 
 ## 🐳 Deployment
 
-### Docker
+### AWS Lambda via SAM
 
-#### Build Image
+#### Prerequisites
+
+1. AWS CLI configured with appropriate permissions
+2. SAM CLI installed
+3. S3 bucket for deployment artifacts
+4. Secrets configured in AWS Systems Manager or environment
+
+#### Deploy to Production
 
 ```bash
-docker build -t kaiassistant-api:latest .
+# Build the application
+sam build --template infra/template.yaml
+
+# Deploy to AWS
+sam deploy \
+  --template .aws-sam/build/template.yaml \
+  --stack-name kaiassistant-api-stack \
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+  --s3-bucket your-deployment-bucket \
+  --parameter-overrides \
+    MongoConnectionString="your-mongo-connection" \
+    GeminiApiKey="your-gemini-key" \
+    SmtpSenderEmail="sender@example.com" \
+    SmtpReceiverEmail="recipient@example.com" \
+    SmtpSenderPassword="password"
 ```
 
-#### Run Container
+#### Get API URL
 
 ```bash
-docker run -d -p 8080:8080 \
+aws cloudformation describe-stacks \
+  --stack-name kaiassistant-api-stack \
+  --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+  --output text
+```
+
+### Local Development with Docker
+
+````bash
+# Build image
+docker build -t kaiassistant-api .
+
+# Run container
+docker run -p 8080:8080 \
   -e GEMINI_API_KEY=your-key \
-  -e MONGODB__CONNECTIONSTRING=mongodb://host.docker.internal:27017 \
-  -e EMAIL__SENDERPASSWORD=your-password \
-  --name kaiassistant \
-  kaiassistant-api:latest
-```
+  -e MONGODB_CONNECTIONSTRING=mongo-connection \
+  kaiassistant-api
+---
 
-#### Docker Compose
+## 🔄 CI/CD Pipeline
 
-```yaml
-version: "3.8"
+### GitHub Actions Workflow
 
-services:
-  api:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - MONGODB__CONNECTIONSTRING=mongodb://mongo:27017
-      - EMAIL__SENDERPASSWORD=${EMAIL_PASSWORD}
-    depends_on:
-      - mongo
+Located at `.github/workflows/deploy-lambda.yml`
 
-  mongo:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
+#### Triggers
 
-volumes:
-  mongo-data:
-```
+- Push to `production` branch
+- Manual trigger via `workflow_dispatch`
 
-Run with:
+#### Pipeline Steps
 
-```bash
-docker-compose up -d
-```
+1. **Checkout Code**: Clone repository
+2. **Setup .NET**: Install .NET 10.0 SDK
+3. **Install SAM CLI**: Setup AWS SAM for deployment
+4. **Configure AWS**: Authenticate with AWS credentials
+5. **Restore Dependencies**: `dotnet restore`
+6. **SAM Build**: Build Lambda package
+7. **S3 Bucket Setup**: Create deployment bucket if needed
+8. **Stack Cleanup**: Remove failed stacks
+9. **SAM Deploy**: Deploy to AWS Lambda
+10. **Error Handling**: Log CloudFormation events on failure
+11. **API URL Output**: Display deployed API endpoint
 
-### Azure Deployment
+#### Required Secrets
 
-#### App Service
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `MONGODB_CONNECTIONSTRING`
+- `MONGODB_DATABASE`
+- `ALLOWED_ORIGINS`
+- `SMTP_SENDER_EMAIL`
+- `SMTP_RECEIVER_EMAIL`
+- `SMTP_SENDER_PASSWORD`
+- `GEMINI_API_KEY`
 
-```bash
-# Login to Azure
-az login
+---
 
-# Create resource group
-az group create --name KaiAssistantRG --location eastus
+## 🏗️ Infrastructure
 
-# Create App Service plan
-az appservice plan create --name KaiAssistantPlan --resource-group KaiAssistantRG --sku B1 --is-linux
+### AWS SAM Template
 
-# Create web app
-az webapp create --resource-group KaiAssistantRG --plan KaiAssistantPlan --name kaiassistant-api --runtime "DOTNETCORE:10.0"
+Located at `infra/template.yaml`
 
-# Configure app settings
-az webapp config appsettings set --resource-group KaiAssistantRG --name kaiassistant-api --settings \
-  GEMINI_API_KEY="your-key" \
-  MONGODB__CONNECTIONSTRING="your-connection-string"
+#### Resources
 
-# Deploy
-az webapp deployment source config-zip --resource-group KaiAssistantRG --name kaiassistant-api --src publish.zip
-```
+- **KaiAssistantFunction**: AWS Lambda function
+  - Runtime: dotnet10
+  - Memory: 512MB
+  - Timeout: 30 seconds
+  - Handler: KaiAssistant.API
+- **KaiAssistantApi**: API Gateway HTTP API
+  - Stage: $default
+  - CORS enabled
+  - Routes: /{proxy+} (ANY method)
 
-#### Azure Container Apps
+#### Parameters
 
-```bash
-# Create container app
-az containerapp create \
-  --name kaiassistant \
-  --resource-group KaiAssistantRG \
-  --image kaiassistant-api:latest \
-  --environment production \
-  --ingress external \
-  --target-port 8080 \
-  --secrets \
-    gemini-api-key="your-key" \
-    mongo-connection="your-connection"
-```
+See template.yaml for full parameter list. All sensitive parameters are marked as `NoEcho: true`.
+
+#### Environment Variables
+
+Lambda function environment includes:
+- MongoDB connection settings
+- Email configuration
+- Gemini API settings
+- CORS configuration
+
+### SAM Configuration
+
+Located at `infra/samconfig.toml`
+
+- Stack name: kaiassistant-api-stack
+- S3 prefix: kaiassistant-api
+- Region: us-east-1
+- Capabilities: CAPABILITY_IAM, CAPABILITY_NAMED_IAM
 
 ---
 
 ## 🔒 Security
 
-### Best Practices Implemented
+### Implemented Security Measures
 
-✅ **No Hardcoded Secrets**: All sensitive data via secrets management  
-✅ **CORS Protection**: Configurable allowed origins  
-✅ **Input Validation**: FluentValidation on all requests  
-✅ **Exception Handling**: Global middleware prevents info leakage  
-✅ **HTTPS**: Configurable SSL/TLS enforcement  
-✅ **Rate Limiting**: Circuit breaker prevents abuse  
-✅ **Secret Rotation**: Environment variable support
+- **Environment Variables**: Sensitive data stored as env vars
+- **CORS Configuration**: Restricted cross-origin access
+- **Input Validation**: Comprehensive validation with FluentValidation
+- **Error Handling**: Generic error responses to prevent information leakage
+- **HTTPS Only**: API Gateway enforces HTTPS
+- **IAM Roles**: Least-privilege Lambda execution role
 
-### Secret Management Options
+### Best Practices
 
-1. **Development**: .NET User Secrets
-2. **Production**: Environment Variables
-3. **Azure**: Azure Key Vault
-4. **Docker**: Docker secrets or .env files
-
-> **📖 Complete Security Guide**: See [SECURITY_SETUP.md](SECURITY_SETUP.md)
+- Never commit secrets to version control
+- Use AWS Secrets Manager for production secrets
+- Rotate API keys regularly
+- Monitor Lambda logs for security events
+- Implement rate limiting at API Gateway level
 
 ---
 
@@ -637,7 +716,7 @@ http_server_active_requests
 # Custom metrics
 kaiassistant_rag_chunks_retrieved
 kaiassistant_gemini_model_fallback_count
-```
+````
 
 ### Logging
 
@@ -647,6 +726,7 @@ Structured logging with levels:
 - **Warning**: Missing data, model fallbacks
 - **Error**: Failures, exceptions
 - **Debug**: Request/response details (dev only)
+- CloudWatch Logs for Lambda function logs
 
 ### Health Checks
 
@@ -725,15 +805,17 @@ KaiAssistant/
 │       └── MongoContext.cs
 │
 ├── KaiAssistant.Tests/                  # 🧪 Test Project
-│   ├── AssistantServiceTests.cs         # Unit tests
-│   ├── AiPromptBuilderTests.cs
-│   ├── ResumeContextProviderTests.cs
-│   └── ServiceRegistrationTests.cs
+│   ├── Integration/                  # Integration Tests
+│   └── Unit Tests                    # Unit Tests
 │
-├── Dockerfile                           # 🐳 Container definition
-├── KaiAssistant.sln                    # Solution file
-├── SECURITY_SETUP.md                   # Security guide
-└── README.md                           # This file
+├── infra/                            # Infrastructure as Code
+│   ├── template.yaml                 # SAM Template
+│   └── samconfig.toml                # SAM Configuration
+├── .github/workflows/                # CI/CD Pipelines
+│   └── deploy-lambda.yml             # Lambda Deployment
+├── Dockerfile                        # Container Definition
+├── KaiAssistant.sln                  # Solution File
+└── README.md                         # This File
 ```
 
 ---
