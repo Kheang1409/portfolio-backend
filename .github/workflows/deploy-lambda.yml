@@ -57,6 +57,8 @@ jobs:
 
       - name: SAM Deploy
         run: |
+          # Gmail app passwords are often shown with spaces; strip all whitespace to avoid truncation/splitting.
+          SMTP_SENDER_PASSWORD_CLEAN="$(printf '%s' "${{ secrets.SMTP_SENDER_PASSWORD }}" | tr -d '[:space:]')"
           sam deploy \
             --template .aws-sam/build/template.yaml \
             --no-confirm-changeset \
@@ -70,7 +72,7 @@ jobs:
               AllowedOrigins="${{ secrets.ALLOWED_ORIGINS }}" \
               SmtpSenderEmail="${{ secrets.SMTP_SENDER_EMAIL }}" \
               SmtpReceiverEmail="${{ secrets.SMTP_RECEIVER_EMAIL }}" \
-              SmtpSenderPassword="${{ secrets.SMTP_SENDER_PASSWORD }}" \
+              SmtpSenderPassword="$SMTP_SENDER_PASSWORD_CLEAN" \
               GeminiApiKey="${{ secrets.GEMINI_API_KEY }}"
 
       - name: Get CloudFormation events on failure
