@@ -1,6 +1,8 @@
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
+using System.Net;
+using System.Text;
 using KaiAssistant.Domain.Entities;
 
 namespace KaiAssistant.Application.Services;
@@ -14,261 +16,207 @@ public class EmailService : IEmailService
         _emailSettings = emailSettings;
     }
 
-    public async Task SendContactEmailAsync(string Name, string Email, string Message)
+    public async Task SendContactEmailAsync(string name, string email, string messageText)
     {
+        var utcNow = DateTime.UtcNow;
+
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse(_emailSettings.SenderEmail));
         message.To.Add(MailboxAddress.Parse(_emailSettings.RecieverEmail));
-        message.Subject = $"🔔 New Contact Form Submission from {Name}";
-        message.Body = new TextPart("html")
+        message.Subject = $"New portfolio contact: {name}";
+
+        var builder = new BodyBuilder
         {
-            Text = $"""
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Contact Form Submission</title>
-                </head>
-                <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4;">
-                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 40px 20px;">
-                        <tr>
-                            <td align="center">
-                                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
-                                    <!-- Header -->
-                                    <tr>
-                                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px 40px; text-align: center;">
-                                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600; letter-spacing: -0.5px;">
-                                                � New Contact Message
-                                            </h1>
-                                            <p style="margin: 10px 0 0; color: #e0e7ff; font-size: 14px;">
-                                                You've received a new inquiry from your website
-                                            </p>
-                                        </td>
-                                    </tr>
-                                    
-                                    <!-- Content -->
-                                    <tr>
-                                        <td style="padding: 40px;">
-                                            <!-- Sender Info -->
-                                            <div style="background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
-                                                <table width="100%" cellpadding="0" cellspacing="0">
-                                                    <tr>
-                                                        <td style="padding-bottom: 12px;">
-                                                            <span style="display: inline-block; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">From</span>
-                                                            <h3 style="margin: 5px 0 0; color: #1f2937; font-size: 20px; font-weight: 600;">
-                                                                {Name}
-                                                            </h3>
-                                                        </td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td>
-                                                            <span style="display: inline-block; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Email</span>
-                                                            <p style="margin: 5px 0 0; color: #4b5563; font-size: 16px;">
-                                                                <a href="mailto:{Email}" style="color: #667eea; text-decoration: none; font-weight: 500;">
-                                                                    {Email}
-                                                                </a>
-                                                            </p>
-                                                        </td>
-                                                    </tr>
-                                                </table>
-                                            </div>
-                                            
-                                            <!-- Message -->
-                                            <div style="margin-bottom: 25px;">
-                                                <span style="display: inline-block; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">Message</span>
-                                                <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; margin-top: 10px;">
-                                                    <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word;">
-                                                        {Message}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            
-                                            <!-- Action Button -->
-                                            <div style="text-align: center; margin: 30px 0;">
-                                                <a href="mailto:{Email}?subject=Re: Contact Form Submission" 
-                                                   style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px; box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3); transition: all 0.3s ease;">
-                                                    📧 Reply to {Name}
-                                                </a>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    
-                                    <!-- Footer -->
-                                    <tr>
-                                        <td style="background-color: #f9fafb; padding: 25px 40px; border-top: 1px solid #e5e7eb;">
-                                            <table width="100%" cellpadding="0" cellspacing="0">
-                                                <tr>
-                                                    <td style="text-align: center;">
-                                                        <p style="margin: 0; color: #9ca3af; font-size: 13px; line-height: 1.6;">
-                                                            📅 Received on <strong style="color: #6b7280;">{DateTime.UtcNow:dddd, MMMM d, yyyy}</strong> at <strong style="color: #6b7280;">{DateTime.UtcNow:h:mm tt}</strong> UTC
-                                                        </p>
-                                                        <p style="margin: 10px 0 0; color: #9ca3af; font-size: 12px;">
-                                                            Sent via KaiAssistant Contact Form
-                                                        </p>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                </table>
-                                
-                                <!-- Footer Note -->
-                                <table width="600" cellpadding="0" cellspacing="0" style="margin-top: 20px;">
-                                    <tr>
-                                        <td style="text-align: center; padding: 0 20px;">
-                                            <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.5;">
-                                                This is an automated message from your contact form.<br>
-                                                Please do not reply directly to this email.
-                                            </p>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                    </table>
-                </body>
-                </html>
-            """
+            HtmlBody = BuildOwnerNotificationHtml(name, email, messageText, utcNow),
+            TextBody = BuildOwnerNotificationText(name, email, messageText, utcNow)
         };
+        message.Body = builder.ToMessageBody();
 
         await SendEmailAsync(message);
     }
 
-    public async Task SendConfirmationEmailAsync(string Name, string Email)
+    public async Task SendConfirmationEmailAsync(string name, string email)
     {
+        var utcNow = DateTime.UtcNow;
+
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse(_emailSettings.SenderEmail));
-        message.To.Add(MailboxAddress.Parse(Email));
-        message.Subject = "✅ Thank You for Contacting Me!";
-        message.Body = new TextPart("html")
+        message.To.Add(MailboxAddress.Parse(email));
+        message.Subject = "Thanks for reaching out — I received your message";
+
+        var builder = new BodyBuilder
         {
-            Text = $"""
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Message Received</title>
-                </head>
-                <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4;">
-                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 40px 20px;">
-                        <tr>
-                            <td align="center">
-                                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
-                                    <!-- Header -->
-                                    <tr>
-                                        <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 40px 40px; text-align: center;">
-                                            <div style="background-color: rgba(255, 255, 255, 0.2); width: 80px; height: 80px; margin: 0 auto 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                                <span style="font-size: 48px;">✅</span>
-                                            </div>
-                                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600; letter-spacing: -0.5px;">
-                                                Message Received!
-                                            </h1>
-                                            <p style="margin: 10px 0 0; color: #d1fae5; font-size: 14px;">
-                                                Thank you for reaching out to me
-                                            </p>
-                                        </td>
-                                    </tr>
-                                    
-                                    <!-- Content -->
-                                    <tr>
-                                        <td style="padding: 40px;">
-                                            <p style="margin: 0 0 20px; color: #1f2937; font-size: 16px; line-height: 1.6;">
-                                                Hi <strong style="color: #10b981;">{Name}</strong>,
-                                            </p>
-                                            
-                                            <p style="margin: 0 0 20px; color: #4b5563; font-size: 15px; line-height: 1.7;">
-                                                Thank you for contacting me through my portfolio website! I've successfully received your message and I'm excited to connect with you.
-                                            </p>
-                                            
-                                            <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-left: 4px solid #10b981; padding: 20px; border-radius: 8px; margin: 25px 0;">
-                                                <p style="margin: 0; color: #166534; font-size: 14px; line-height: 1.6;">
-                                                    <strong>📬 What happens next?</strong><br>
-                                                    I'll review your message and get back to you as soon as possible, typically within 24-48 hours.
-                                                </p>
-                                            </div>
-                                            
-                                            <p style="margin: 25px 0 20px; color: #4b5563; font-size: 15px; line-height: 1.7;">
-                                                In the meantime, feel free to explore more of my work:
-                                            </p>
-                                            
-                                            <!-- Social Links -->
-                                            <table width="100%" cellpadding="0" cellspacing="0" style="margin: 25px 0;">
-                                                <tr>
-                                                    <td align="center">
-                                                        <table cellpadding="0" cellspacing="0">
-                                                            <tr>
-                                                                <td style="padding: 0 10px;">
-                                                                    <a href="https://kaitaing.netlify.app" style="display: inline-block; background-color: #f3f4f6; color: #374151; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; transition: all 0.3s ease;">
-                                                                        🌐 Portfolio
-                                                                    </a>
-                                                                </td>
-                                                                <td style="padding: 0 10px;">
-                                                                    <a href="https://github.com/Kheang1409" style="display: inline-block; background-color: #f3f4f6; color: #374151; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 500; font-size: 14px; transition: all 0.3s ease;">
-                                                                        💻 GitHub
-                                                                    </a>
-                                                                </td>
-                                                            </tr>
-                                                        </table>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                            
-                                            <p style="margin: 30px 0 0; color: #4b5563; font-size: 15px; line-height: 1.7;">
-                                                Looking forward to connecting with you!
-                                            </p>
-                                            
-                                            <p style="margin: 20px 0 0; color: #1f2937; font-size: 15px; font-weight: 600;">
-                                                Best regards,<br>
-                                                <span style="color: #10b981; font-size: 18px;">Hang Kheang Taing</span>
-                                            </p>
-                                        </td>
-                                    </tr>
-                                    
-                                    <!-- Footer -->
-                                    <tr>
-                                        <td style="background-color: #f9fafb; padding: 25px 40px; border-top: 1px solid #e5e7eb;">
-                                            <table width="100%" cellpadding="0" cellspacing="0">
-                                                <tr>
-                                                    <td style="text-align: center;">
-                                                        <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.6;">
-                                                            This is an automated confirmation email.<br>
-                                                            Please do not reply directly to this message.
-                                                        </p>
-                                                        <p style="margin: 10px 0 0; color: #9ca3af; font-size: 12px;">
-                                                            © {DateTime.UtcNow.Year} Hang Kheang Taing. All rights reserved.
-                                                        </p>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                    </table>
-                </body>
-                </html>
-            """
+            HtmlBody = BuildAutoReplyHtml(name, utcNow),
+            TextBody = BuildAutoReplyText(name, utcNow)
         };
+        message.Body = builder.ToMessageBody();
 
         await SendEmailAsync(message);
     }
     
     private async Task SendEmailAsync(MimeMessage message)
     {
-        try
-        {
-            using var client = new SmtpClient();
-            await client.ConnectAsync(_emailSettings.SmtpServer, _emailSettings.Port, SecureSocketOptions.SslOnConnect);
-            await client.AuthenticateAsync(_emailSettings.SenderEmail, _emailSettings.SenderPassword);
-            await client.SendAsync(message);
-            await client.DisconnectAsync(true);
-        }
-        catch (Exception)
-        {
-            throw;
-        }
+                using var client = new SmtpClient();
+                await client.ConnectAsync(_emailSettings.SmtpServer, _emailSettings.Port, SecureSocketOptions.Auto);
+                await client.AuthenticateAsync(_emailSettings.SenderEmail, _emailSettings.SenderPassword);
+                await client.SendAsync(message);
+                await client.DisconnectAsync(true);
     }
+
+        private static string BuildOwnerNotificationHtml(string name, string email, string messageText, DateTime utcNow)
+        {
+                var safeName = HtmlEncode(name);
+                var safeEmail = HtmlEncode(email);
+                var safeMessage = HtmlEncode(messageText);
+
+                return $"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Contact Message</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f8fafc; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; color:#0f172a;">
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:32px 16px; background-color:#f8fafc;">
+        <tr>
+            <td align="center">
+                <table width="640" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px; width:100%; background-color:#ffffff; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;">
+                    <tr>
+                        <td style="padding:24px 28px; background-color:#0b1220;">
+                            <div style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#cbd5e1;">KaiAssistant • Portfolio Contact</div>
+                            <div style="margin-top:6px; font-size:22px; font-weight:700; color:#ffffff;">New contact message</div>
+                            <div style="margin-top:6px; font-size:13px; color:#94a3b8;">Received {utcNow:yyyy-MM-dd HH:mm} UTC</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 28px;">
+                            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 18px;">
+                                <tr>
+                                    <td style="padding:14px 16px; background-color:#f1f5f9; border:1px solid #e2e8f0; border-radius:12px;">
+                                        <div style="font-size:12px; color:#475569; text-transform:uppercase; letter-spacing:.06em;">From</div>
+                                        <div style="margin-top:4px; font-size:18px; font-weight:700; color:#0f172a;">{safeName}</div>
+                                        <div style="margin-top:6px; font-size:14px; color:#334155;">
+                                            <a href="mailto:{safeEmail}" style="color:#2563eb; text-decoration:none;">{safeEmail}</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <div style="font-size:12px; color:#475569; text-transform:uppercase; letter-spacing:.06em;">Message</div>
+                            <div style="margin-top:8px; padding:16px; background-color:#ffffff; border:1px solid #e2e8f0; border-radius:12px;">
+                                <div style="white-space:pre-wrap; word-break:break-word; font-size:14px; line-height:1.7; color:#0f172a;">{safeMessage}</div>
+                            </div>
+
+                            <div style="margin-top:20px;">
+                                <a href="mailto:{safeEmail}?subject=Re:%20Portfolio%20contact" style="display:inline-block; background-color:#2563eb; color:#ffffff; text-decoration:none; padding:12px 18px; border-radius:10px; font-weight:700; font-size:14px;">Reply</a>
+                                <span style="margin-left:10px; font-size:12px; color:#64748b;">Tip: reply directly to the sender’s email.</span>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:16px 28px; background-color:#f8fafc; border-top:1px solid #e2e8f0;">
+                            <div style="font-size:12px; color:#64748b; line-height:1.6;">This email was generated automatically from your portfolio contact form.</div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+""";
+        }
+
+        private static string BuildOwnerNotificationText(string name, string email, string messageText, DateTime utcNow)
+        {
+                var sb = new StringBuilder();
+                sb.AppendLine("New contact message (Portfolio)");
+                sb.AppendLine($"Received: {utcNow:yyyy-MM-dd HH:mm} UTC");
+                sb.AppendLine();
+                sb.AppendLine($"From: {name}");
+                sb.AppendLine($"Email: {email}");
+                sb.AppendLine();
+                sb.AppendLine("Message:");
+                sb.AppendLine(messageText);
+                return sb.ToString();
+        }
+
+        private static string BuildAutoReplyHtml(string name, DateTime utcNow)
+        {
+                var safeName = HtmlEncode(name);
+
+                return $"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Message Received</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f8fafc; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; color:#0f172a;">
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:32px 16px; background-color:#f8fafc;">
+        <tr>
+            <td align="center">
+                <table width="640" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px; width:100%; background-color:#ffffff; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;">
+                    <tr>
+                        <td style="padding:24px 28px; background-color:#0b1220;">
+                            <div style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#cbd5e1;">Hang Kheang Taing • Software Engineer</div>
+                            <div style="margin-top:6px; font-size:22px; font-weight:700; color:#ffffff;">Thanks — I received your message</div>
+                            <div style="margin-top:6px; font-size:13px; color:#94a3b8;">Auto-reply sent {utcNow:yyyy-MM-dd HH:mm} UTC</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 28px;">
+                            <p style="margin:0 0 14px; font-size:15px; line-height:1.7; color:#0f172a;">Hi <strong>{safeName}</strong>,</p>
+                            <p style="margin:0 0 14px; font-size:14px; line-height:1.7; color:#334155;">Thank you for reaching out through my portfolio. I’ve received your message and will review it shortly.</p>
+                            <div style="margin:16px 0; padding:14px 16px; background-color:#f1f5f9; border:1px solid #e2e8f0; border-radius:12px;">
+                                <div style="font-size:13px; line-height:1.7; color:#0f172a;">
+                                    <strong style="color:#0f172a;">What to expect</strong><br>
+                                    I typically respond within <strong>1–2 business days</strong>. If your request is time-sensitive, feel free to reply to this email with "URGENT" in the subject.
+                                </div>
+                            </div>
+                            <p style="margin:0 0 14px; font-size:14px; line-height:1.7; color:#334155;">While you’re here, you can find more of my work:</p>
+                            <p style="margin:0 0 18px;">
+                                <a href="https://kaitaing.netlify.app" style="display:inline-block; background-color:#2563eb; color:#ffffff; text-decoration:none; padding:10px 14px; border-radius:10px; font-weight:700; font-size:13px; margin-right:10px;">Portfolio</a>
+                                <a href="https://github.com/Kheang1409" style="display:inline-block; background-color:#0f172a; color:#ffffff; text-decoration:none; padding:10px 14px; border-radius:10px; font-weight:700; font-size:13px;">GitHub</a>
+                            </p>
+                            <p style="margin:0; font-size:14px; line-height:1.7; color:#334155;">Best regards,<br><strong style="color:#0f172a;">Hang Kheang Taing</strong></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:16px 28px; background-color:#f8fafc; border-top:1px solid #e2e8f0;">
+                            <div style="font-size:12px; color:#64748b; line-height:1.6;">This is an automated response confirming receipt. Please don’t share passwords or sensitive information via email.</div>
+                            <div style="margin-top:8px; font-size:12px; color:#94a3b8;">© {utcNow.Year} Hang Kheang Taing</div>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+""";
+        }
+
+        private static string BuildAutoReplyText(string name, DateTime utcNow)
+        {
+                var sb = new StringBuilder();
+                sb.AppendLine("Thanks — I received your message");
+                sb.AppendLine($"Auto-reply sent: {utcNow:yyyy-MM-dd HH:mm} UTC");
+                sb.AppendLine();
+                sb.AppendLine($"Hi {name},");
+                sb.AppendLine();
+                sb.AppendLine("Thank you for reaching out through my portfolio. I’ve received your message and will review it shortly.");
+                sb.AppendLine("I typically respond within 1–2 business days.");
+                sb.AppendLine();
+                sb.AppendLine("Portfolio: https://kaitaing.netlify.app");
+                sb.AppendLine("GitHub: https://github.com/Kheang1409");
+                sb.AppendLine();
+                sb.AppendLine("Best regards,");
+                sb.AppendLine("Hang Kheang Taing");
+                return sb.ToString();
+        }
+
+        private static string HtmlEncode(string value) => WebUtility.HtmlEncode(value ?? string.Empty);
 }
