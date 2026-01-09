@@ -54,6 +54,66 @@ Parameters:
     NoEcho: true
     Description: Google Gemini API key
 
+  SmtpEnabled:
+    Type: String
+    Default: "true"
+    Description: Enable SMTP sending (true/false)
+
+  DotNetEnvironment:
+    Type: String
+    Default: Production
+    Description: .NET environment name (Production/Development)
+
+  GeminiModelNames:
+    Type: String
+    Default: gemini-2.5-flash:generateContent,gemini-2.5-flash-lite:generateContent
+    Description: Comma/semicolon separated Gemini model names
+
+  GeminiEndpoint:
+    Type: String
+    Default: https://generativelanguage.googleapis.com/v1beta/models/
+    Description: Gemini API endpoint base URL
+
+  GeminiSystemPrompt:
+    Type: String
+    Default: You are Mr.Taing's professional AI assistant. Represent Mr.Taing professionally and help visitors learn about his background, skills, and experience.
+    Description: System prompt for the assistant
+
+  GeminiPromptMaxChars:
+    Type: String
+    Default: "10000"
+    Description: Maximum prompt size in characters
+
+  GeminiIncludePersonalDetails:
+    Type: String
+    Default: "true"
+    Description: Whether to include personal details (true/false)
+
+  GeminiTemperature:
+    Type: String
+    Default: "0.4"
+    Description: Gemini temperature
+
+  GeminiTopK:
+    Type: String
+    Default: "20"
+    Description: Gemini top-k
+
+  GeminiTopP:
+    Type: String
+    Default: "0.85"
+    Description: Gemini top-p
+
+  GeminiMaxOutputTokens:
+    Type: String
+    Default: "768"
+    Description: Gemini max output tokens
+
+  GeminiCandidateCount:
+    Type: String
+    Default: "1"
+    Description: Gemini candidate count
+
 Resources:
   KaiAssistantFunction:
     Type: AWS::Serverless::Function
@@ -66,25 +126,25 @@ Resources:
         Variables:
           MONGODB_CONNECTIONSTRING: !Ref MongoConnectionString
           MONGODB_DATABASE: !Ref MongoDatabaseName
-          EmailSettings__SmtpServer: !Ref SmtpServer
-          EmailSettings__Port: !Ref SmtpPort
-          EmailSettings__SenderEmail: !Ref SmtpSenderEmail
-          EmailSettings__ReceiverEmail: !Ref SmtpReceiverEmail
-          EmailSettings__SenderPassword: !Ref SmtpSenderPassword
-          EmailSettings__Enabled: "true"
-          GeminiSettings__ApiKey: !Ref GeminiApiKey
-          GeminiSettings__ModelNames__0: "gemini-2.5-flash:generateContent"
-          GeminiSettings__ModelNames__1: "gemini-2.5-flash-lite:generateContent"
-          GeminiSettings__Endpoint: "https://generativelanguage.googleapis.com/v1beta/models/"
-          GeminiSettings__SystemPrompt: "You are Mr.Taing's professional AI assistant. Represent Mr.Taing professionally and help visitors learn about his background, skills, and experience."
-          GeminiSettings__PromptMaxChars: "10000"
-          GeminiSettings__IncludePersonalDetails: "true"
-          GeminiSettings__Temperature: "0.4"
-          GeminiSettings__TopK: "20"
-          GeminiSettings__TopP: "0.85"
-          GeminiSettings__MaxOutputTokens: "768"
-          GeminiSettings__CandidateCount: "1"
-          Cors__AllowedOrigins__0: !Ref AllowedOrigins
+          DOTNET_ENVIRONMENT: !Ref DotNetEnvironment
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          SMTP_SERVER: !Ref SmtpServer
+          SMTP_PORT: !Ref SmtpPort
+          SMTP_SENDER_EMAIL: !Ref SmtpSenderEmail
+          SMTP_RECEIVER_EMAIL: !Ref SmtpReceiverEmail
+          SMTP_SENDER_PASSWORD: !Ref SmtpSenderPassword
+          SMTP_ENABLED: !Ref SmtpEnabled
+          GEMINI_API_KEY: !Ref GeminiApiKey
+          GEMINI_MODEL_NAMES: !Ref GeminiModelNames
+          GEMINI_ENDPOINT: !Ref GeminiEndpoint
+          GEMINI_SYSTEM_PROMPT: !Ref GeminiSystemPrompt
+          GEMINI_PROMPT_MAX_CHARS: !Ref GeminiPromptMaxChars
+          GEMINI_INCLUDE_PERSONAL_DETAILS: !Ref GeminiIncludePersonalDetails
+          GEMINI_TEMPERATURE: !Ref GeminiTemperature
+          GEMINI_TOPK: !Ref GeminiTopK
+          GEMINI_TOPP: !Ref GeminiTopP
+          GEMINI_MAX_OUTPUT_TOKENS: !Ref GeminiMaxOutputTokens
+          GEMINI_CANDIDATE_COUNT: !Ref GeminiCandidateCount
       Events:
         ApiEvent:
           Type: HttpApi
