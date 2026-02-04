@@ -12,4 +12,13 @@ public class GeminiSettings : AssistantBehaviorSettings
     public double? TopP { get; set; }
     public int? MaxOutputTokens { get; set; }
     public int? CandidateCount { get; set; }
+    // How long to consider the last successful model as preferred (seconds)
+    public int LastSuccessfulModelCacheTtlSeconds { get; set; } = 300;
+    // If the service returns a RetryInfo.retryDelay greater than this (seconds), skip waiting and try the next model
+    public int SkipRetryDelayThresholdSeconds { get; set; } = 10;
+    // If a model's 429 counter reaches this value, deprioritize or skip it
+    public int DeprioritizeOn429Count { get; set; } = 3;
+    // If true, models with 429 count >= DeprioritizeOn429Count will be skipped entirely (not retried)
+    // If false, they will be moved to the end of the candidate list (deprioritized)
+    public bool DeprioritizeSkip { get; set; } = false;
 }

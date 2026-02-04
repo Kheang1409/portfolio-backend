@@ -1,3 +1,7 @@
 namespace KaiAssistant.Domain.Entities;
 
-public record Message(string Role, string Content);
+public class ConversationMessage
+{
+    public string Role { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+}

@@ -26,7 +26,7 @@ public class AssistantService : IAssistantService
         _logger = logger;
     }
 
-    public async Task<string> AskQuestionAsync(string question, CancellationToken cancellationToken = default)
+    public async Task<string> AskQuestionAsync(string question, ConversationMessage[]? history = null, CancellationToken cancellationToken = default)
     {
         // Validate input
         if (string.IsNullOrWhiteSpace(question))
@@ -74,18 +74,74 @@ public class AssistantService : IAssistantService
         var genConfigNode = JsonSerializer.SerializeToNode(genConfig) as JsonObject ?? new JsonObject();
 
         // Gemini payload: contents array with role/parts structure
-        var contentsArray = new JsonArray(
-            new JsonObject
+        var contentsArray = new JsonArray();
+
+        // Add system prompt as a model message (system-equivalent)
+        contentsArray.Add(new JsonObject
+        {
+            ["role"] = "model",
+            ["parts"] = new JsonArray(new JsonObject { ["text"] = systemPrompt })
+        });
+
+        // Add conversation history if provided (limit to last 10 messages to avoid token limits)
+        int historyChars = 0;
+        if (history != null && history.Length > 0)
+        {
+            var recentHistory = history.Skip(Math.Max(0, history.Length - 10));
+            foreach (var msg in recentHistory)
             {
-                ["role"] = "user",
-                ["parts"] = new JsonArray(new JsonObject { ["text"] = systemPrompt })
-            },
-            new JsonObject
-            {
-                ["role"] = "user",
-                ["parts"] = new JsonArray(new JsonObject { ["text"] = $"Resume context:\n{combinedResume}\n\nUser question:\n{question}" })
+                if (string.IsNullOrWhiteSpace(msg.Content)) continue;
+                historyChars += msg.Content.Length;
+
+                // Normalize roles: Gemini accepts only 'user' and 'model'.
+                string normalizedRole;
+                if (string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase))
+                {
+                    normalizedRole = "user";
+                }
+                else if (string.Equals(msg.Role, "model", StringComparison.OrdinalIgnoreCase) || string.Equals(msg.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                {
+                    normalizedRole = "model";
+                }
+                else
+                {
+                    // Unexpected role value - coerce to 'model' and log a warning
+                    _logger.LogWarning("Unrecognized role '{Role}' in conversation history; coercing to 'model'.", msg.Role);
+                    normalizedRole = "model";
+                }
+
+                contentsArray.Add(new JsonObject
+                {
+                    ["role"] = normalizedRole,
+                    ["parts"] = new JsonArray(new JsonObject { ["text"] = msg.Content })
+                });
             }
-        );
+        }
+
+        // Simple payload-size estimate and guard. If payload seems too large, ask user to clear chat to continue.
+        var estimatedSize = systemPrompt.Length + question.Length + historyChars + combinedResume.Length;
+        var sizeThreshold = Math.Max(20000, maxChars * 2);
+        if (estimatedSize > sizeThreshold)
+        {
+            return "Our conversation is getting long and may exceed server limits. Please clear chat history to start a fresh conversation (sorry, we're still poor xD).";
+        }
+
+        // Add resume/context as a model message (system-equivalent), then add the user's question as a user message
+        if (!string.IsNullOrWhiteSpace(combinedResume))
+        {
+            contentsArray.Add(new JsonObject
+            {
+                ["role"] = "model",
+                ["parts"] = new JsonArray(new JsonObject { ["text"] = $"Resume context:\n{combinedResume}" })
+            });
+        }
+
+        // Add current user question
+        contentsArray.Add(new JsonObject
+        {
+            ["role"] = "user",
+            ["parts"] = new JsonArray(new JsonObject { ["text"] = question })
+        });
 
         var generationConfig = new JsonObject();
         if (genConfigNode.TryGetPropertyValue("temperature", out var tempNode)) 
@@ -131,18 +187,69 @@ public class AssistantService : IAssistantService
 
         try
         {
+            _logger.LogDebug("Gemini response body: {Body}", responseBody);
             using var doc = JsonDocument.Parse(responseBody);
-            if (!doc.RootElement.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
+
+            // Try to extract a text reply from multiple possible response shapes returned by Gemini
+            string? TryExtractText(JsonElement el, int depth = 0)
             {
+                if (depth > 10) return null;
+                switch (el.ValueKind)
+                {
+                    case JsonValueKind.Object:
+                        if (el.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String)
+                            return t.GetString();
+                        if (el.TryGetProperty("output_text", out var ot) && ot.ValueKind == JsonValueKind.String)
+                            return ot.GetString();
+                        if (el.TryGetProperty("parts", out var parts) && parts.ValueKind == JsonValueKind.Array && parts.GetArrayLength() > 0)
+                        {
+                            foreach (var p in parts.EnumerateArray())
+                            {
+                                var r = TryExtractText(p, depth + 1);
+                                if (!string.IsNullOrWhiteSpace(r)) return r;
+                            }
+                        }
+                        if (el.TryGetProperty("content", out var content) )
+                        {
+                            var r = TryExtractText(content, depth + 1);
+                            if (!string.IsNullOrWhiteSpace(r)) return r;
+                        }
+                        if (el.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var o in output.EnumerateArray())
+                            {
+                                var r = TryExtractText(o, depth + 1);
+                                if (!string.IsNullOrWhiteSpace(r)) return r;
+                            }
+                        }
+                        if (el.TryGetProperty("candidates", out var cands) && cands.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var c in cands.EnumerateArray())
+                            {
+                                var r = TryExtractText(c, depth + 1);
+                                if (!string.IsNullOrWhiteSpace(r)) return r;
+                            }
+                        }
+                        break;
+                    case JsonValueKind.Array:
+                        foreach (var item in el.EnumerateArray())
+                        {
+                            var r = TryExtractText(item, depth + 1);
+                            if (!string.IsNullOrWhiteSpace(r)) return r;
+                        }
+                        break;
+                }
+                return null;
+            }
+
+            var root = doc.RootElement;
+            var replyText = TryExtractText(root);
+            if (string.IsNullOrWhiteSpace(replyText))
+            {
+                _logger.LogWarning("Could not extract reply text from model response");
                 return "I couldn't generate a suitable response right now.";
             }
-            var first = candidates[0];
-            if (!first.TryGetProperty("content", out var contentElement)) return "I couldn't generate a suitable response right now.";
-            if (!contentElement.TryGetProperty("parts", out var parts) || parts.GetArrayLength() == 0) return "I couldn't generate a suitable response right now.";
-            string? reply = null;
-            try { reply = parts[0].GetProperty("text").GetString(); } catch { reply = parts[0].ToString(); }
-            var finalReply = string.IsNullOrWhiteSpace(reply) ? "I couldn't generate a suitable response right now." : reply.Trim();
-            return finalReply;
+            return replyText.Trim();
         }
         catch (Exception ex)
         {

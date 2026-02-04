@@ -22,9 +22,14 @@ public class AiPromptBuilder : IAiPromptBuilder
         var guardrails = @"
         STYLE RULES:
         - Keep a friendly, concise, and conversational tone.
-        - Answer ONLY using the provided resume context; if info is missing, say so politely.
+        - You have full access to the conversation history provided in this request.
+        - Answer using the provided resume context and the full conversation history.
+        - Use information from previous messages in the conversation to provide personalized responses, including user names and details.
+        - If information about the user (like their name) is mentioned in the conversation history, acknowledge and use it.
+        - If info is missing from both resume and conversation history, say so politely.
         - Keep responses concise (2-4 short paragraphs max); use bullet points for lists.
-        - Be direct and helpful.";
+        - Be direct and helpful.
+        - Always remember and reference details from the ongoing conversation.";
 
         return basePrompt + "\n\n" + guardrails.Trim();
     }

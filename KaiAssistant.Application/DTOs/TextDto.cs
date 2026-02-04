@@ -1,3 +1,5 @@
+using KaiAssistant.Domain.Entities;
+
 namespace KaiAssistant.Application.DTOs;
 
-public record TextDto( string Message);
+public record TextDto(string Message, ConversationMessage[]? History = null);

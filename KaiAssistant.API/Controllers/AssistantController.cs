@@ -14,10 +14,11 @@ public class AssistantController : ControllerBase
     {
         _mediator = mediator;
     }
+
     [HttpPost("ask")]
     public async Task<IActionResult> Applied([FromBody] TextDto dto)
     {
-        var command = new AskAssistantCommand(dto.Message);
+        var command = new AskAssistantCommand(dto.Message, dto.History);
         var response = await _mediator.Send(command);
         return Ok(response);
     }
