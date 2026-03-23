@@ -70,6 +70,12 @@ return {1, 0}
 
     public async Task InvokeAsync(HttpContext context)
     {
+        if (HttpMethods.IsOptions(context.Request.Method))
+        {
+            await _next(context).ConfigureAwait(false);
+            return;
+        }
+
         if (!_flags.EnableRateLimiting)
         {
             await _next(context).ConfigureAwait(false);

@@ -160,6 +160,7 @@ Resources:
           REDIS_URL: !Ref RedisConnectionString
           REDIS__CONNECTIONSTRING: !Ref RedisConnectionString
           DOTNET_ENVIRONMENT: !Ref DotNetEnvironment
+          ASPNETCORE_ENVIRONMENT: !Ref DotNetEnvironment
           ALLOWED_ORIGINS: !Ref AllowedOrigins
           SMTP_SERVER: !Ref SmtpServer
           SMTP_PORT: !Ref SmtpPort
