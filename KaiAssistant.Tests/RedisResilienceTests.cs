@@ -60,7 +60,7 @@ public sealed class RedisResilienceTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["REDIS_URL"] = "redis://localhost:6379"
+                ["REDIS__CONNECTIONSTRING"] = "redis://localhost:6379"
             })
             .Build();
 
@@ -77,7 +77,7 @@ public sealed class RedisResilienceTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["REDIS_URL"] = "redis://localhost:6379"
+                ["REDIS__CONNECTIONSTRING"] = "redis://localhost:6379"
             })
             .Build();
 

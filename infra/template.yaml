@@ -157,10 +157,8 @@ Resources:
         Variables:
           MONGODB_CONNECTIONSTRING: !Ref MongoConnectionString
           MONGODB_DATABASE: !Ref MongoDatabaseName
-          REDIS_URL: !Ref RedisConnectionString
           REDIS__CONNECTIONSTRING: !Ref RedisConnectionString
-          DOTNET_ENVIRONMENT: !Ref DotNetEnvironment
-          ASPNETCORE_ENVIRONMENT: !Ref DotNetEnvironment
+          ASPNETCORE_ENVIRONMENT: !Ref ASPNetCore_Environment
           ALLOWED_ORIGINS: !Ref AllowedOrigins
           SMTP_SERVER: !Ref SmtpServer
           SMTP_PORT: !Ref SmtpPort

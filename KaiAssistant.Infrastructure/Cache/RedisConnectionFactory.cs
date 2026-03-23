@@ -19,7 +19,7 @@ public sealed class RedisConnectionFactory : IRedisConnectionFactory
     public RedisConnectionFactory(IConfiguration configuration, IHostEnvironment environment, ILogger<RedisConnectionFactory> logger)
     {
         _logger = logger;
-        var redisConnectionString = configuration["REDIS_URL"] ?? configuration["Redis:ConnectionString"];
+        var redisConnectionString = Environment.GetEnvironmentVariable("REDIS__CONNECTIONSTRING") ??  configuration["Redis:ConnectionString"];
 
         if (string.IsNullOrWhiteSpace(redisConnectionString))
         {

@@ -32,7 +32,6 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
         .Enrich.FromLogContext();
 });
 
-// Enable Lambda runtime integration for API Gateway HTTP API; keeps controllers intact.
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
 builder.Services.AddOpenTelemetry()
@@ -233,14 +232,12 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
         return;
     }
 
-    var mongoConn = configuration["MongoDB:ConnectionString"]
-        ?? configuration["MONGODB_CONNECTIONSTRING"]
-        ?? Environment.GetEnvironmentVariable("MONGODB_CONNECTIONSTRING")
-        ?? configuration["MongoDB__ConnectionString"];
-    var mongoDb = configuration["MongoDB:DatabaseName"]
-        ?? configuration["MONGODB_DATABASE"]
-        ?? Environment.GetEnvironmentVariable("MONGODB_DATABASE")
-        ?? configuration["MongoDB__DatabaseName"];
+    var mongoConn = FirstNonEmpty(
+        Environment.GetEnvironmentVariable("MONGODB_CONNECTIONSTRING"),
+        configuration["MongoDB:ConnectionString"]);
+    var mongoDb = FirstNonEmpty(
+        Environment.GetEnvironmentVariable("MONGODB_DATABASE"),
+        configuration["MongoDB:DatabaseName"]);
     if (string.IsNullOrWhiteSpace(mongoConn) || string.IsNullOrWhiteSpace(mongoDb))
     {
         throw new InvalidOperationException("MongoDB configuration is required in production.");
@@ -250,11 +247,9 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
 
     if (flags.EnableCache)
     {
-        var redisConn = configuration["REDIS_URL"]
-            ?? configuration["Redis:ConnectionString"]
-            ?? configuration["REDIS__CONNECTIONSTRING"]
-            ?? Environment.GetEnvironmentVariable("REDIS_URL")
-            ?? Environment.GetEnvironmentVariable("REDIS__CONNECTIONSTRING");
+        var redisConn = FirstNonEmpty(
+            Environment.GetEnvironmentVariable("REDIS__CONNECTIONSTRING"),
+            configuration["Redis:ConnectionString"]);
         if (string.IsNullOrWhiteSpace(redisConn))
         {
             throw new InvalidOperationException("Redis configuration is required when cache feature is enabled in production.");
@@ -282,5 +277,18 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
         {
             throw new InvalidOperationException("AI governance limits must be positive in production.");
         }
+    }
+
+    static string? FirstNonEmpty(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 }
