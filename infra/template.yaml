@@ -65,7 +65,7 @@ Parameters:
     Default: "true"
     Description: Enable SMTP sending (true/false)
 
-  ASPNETCORE_ENVIRONMENT:
+  ASPNetCoreEnvironment:
     Type: String
     Default: Production
     Description: .NET environment name (Production/Development)
