@@ -81,7 +81,7 @@ jobs:
               SmtpReceiverEmail="${{ secrets.SMTP_RECEIVER_EMAIL }}" \
               SmtpSenderPassword="$SMTP_SENDER_PASSWORD_CLEAN" \
               SmtpEnabled="false" \
-              DotNetEnvironment="Production" \
+              ASPNETCORE_ENVIRONMENT="Production" \
               GeminiApiKey="${{ secrets.GEMINI_API_KEY }}"
 
       - name: Get CloudFormation events on failure
