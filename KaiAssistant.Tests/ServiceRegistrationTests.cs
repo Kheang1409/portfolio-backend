@@ -3,8 +3,14 @@ using Xunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using KaiAssistant.Application.Interfaces;
+using KaiAssistant.Application.Extensions;
 using KaiAssistant.Infrastructure.Persistence;
 using FluentAssertions;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
+using System.IO;
+
+#nullable enable
 
 namespace KaiAssistant.Tests;
 
@@ -32,6 +38,9 @@ public class ServiceRegistrationTests
             .Build();
 
         var services = new ServiceCollection();
+        services.AddMemoryCache();
+        services.AddSingleton<IHostEnvironment>(new FakeHostEnvironment());
+        services.AddApplicationServices();
         services.AddInfrastructure(configuration);
 
         var provider = services.BuildServiceProvider();
@@ -41,5 +50,13 @@ public class ServiceRegistrationTests
 
         var resumeRepo = provider.GetService<KaiAssistant.Domain.Interfaces.Repositories.IResumeRepository>();
         resumeRepo.Should().NotBeNull();
+    }
+
+    private sealed class FakeHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Development;
+        public string ApplicationName { get; set; } = "KaiAssistant.Tests";
+        public string ContentRootPath { get; set; } = Directory.GetCurrentDirectory();
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

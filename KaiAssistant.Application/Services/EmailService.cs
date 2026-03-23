@@ -1,22 +1,57 @@
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
+using Polly;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 using System.Net;
 using System.Text;
+using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace KaiAssistant.Application.Services;
 
 public class EmailService : IEmailService
 {
     private readonly EmailSettings _emailSettings;
+    private readonly IResilienceStatusProvider _resilience;
+    private readonly ILogger<EmailService> _logger;
+    private readonly AsyncPolicy _sendPolicy;
 
-    public EmailService(EmailSettings emailSettings)
+    public EmailService(EmailSettings emailSettings, IResilienceStatusProvider resilience, ILogger<EmailService> logger)
     {
         _emailSettings = emailSettings;
+        _resilience = resilience;
+        _logger = logger;
+
+        var retry = Policy
+            .Handle<Exception>()
+            .WaitAndRetryAsync(3, attempt => TimeSpan.FromMilliseconds(Math.Min(2000, 200 * Math.Pow(2, attempt))));
+
+        var timeout = Policy.TimeoutAsync(TimeSpan.FromSeconds(10));
+        var circuitBreaker = Policy
+            .Handle<Exception>()
+            .CircuitBreakerAsync(
+                5,
+                TimeSpan.FromSeconds(30),
+                (ex, breakDelay) =>
+                {
+                    _resilience.RecordFailure("email", ex.Message);
+                    _resilience.RecordCircuitState("email", "Open");
+                    _logger.LogWarning(ex, "Email circuit opened for {BreakDelay}.", breakDelay);
+                },
+                () =>
+                {
+                    _resilience.RecordCircuitState("email", "Closed");
+                    _logger.LogInformation("Email circuit reset.");
+                },
+                () => _resilience.RecordCircuitState("email", "HalfOpen"));
+
+        _sendPolicy = Policy.WrapAsync(retry, timeout, circuitBreaker);
     }
 
-    public async Task SendContactEmailAsync(string name, string email, string messageText)
+    public async Task SendContactEmailAsync(string name, string email, string messageText, CancellationToken cancellationToken = default)
     {
         var utcNow = DateTime.UtcNow;
 
@@ -32,10 +67,10 @@ public class EmailService : IEmailService
         };
         message.Body = builder.ToMessageBody();
 
-        await SendEmailAsync(message);
+        await SendEmailAsync(message, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task SendConfirmationEmailAsync(string name, string email)
+    public async Task SendConfirmationEmailAsync(string name, string email, CancellationToken cancellationToken = default)
     {
         var utcNow = DateTime.UtcNow;
 
@@ -51,16 +86,20 @@ public class EmailService : IEmailService
         };
         message.Body = builder.ToMessageBody();
 
-        await SendEmailAsync(message);
+        await SendEmailAsync(message, cancellationToken).ConfigureAwait(false);
     }
     
-    private async Task SendEmailAsync(MimeMessage message)
+    private async Task SendEmailAsync(MimeMessage message, CancellationToken cancellationToken)
     {
+            await _sendPolicy.ExecuteAsync(async ct =>
+            {
                 using var client = new SmtpClient();
-                await client.ConnectAsync(_emailSettings.SmtpServer, _emailSettings.Port, SecureSocketOptions.Auto);
-                await client.AuthenticateAsync(_emailSettings.SenderEmail, _emailSettings.SenderPassword);
-                await client.SendAsync(message);
-                await client.DisconnectAsync(true);
+                await client.ConnectAsync(_emailSettings.SmtpServer, _emailSettings.Port, SecureSocketOptions.Auto, ct).ConfigureAwait(false);
+                await client.AuthenticateAsync(_emailSettings.SenderEmail, _emailSettings.SenderPassword, ct).ConfigureAwait(false);
+                await client.SendAsync(message, ct).ConfigureAwait(false);
+                await client.DisconnectAsync(true, ct).ConfigureAwait(false);
+                _resilience.RecordSuccess("email");
+            }, cancellationToken).ConfigureAwait(false);
     }
 
         private static string BuildOwnerNotificationHtml(string name, string email, string messageText, DateTime utcNow)

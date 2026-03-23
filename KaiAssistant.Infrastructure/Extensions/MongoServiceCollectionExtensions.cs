@@ -27,6 +27,8 @@ public static class MongoServiceCollectionExtensions
         var client = new MongoClient(connectionString);
         services.AddSingleton<IMongoClient>(client);
         services.AddSingleton(sp => client.GetDatabase(databaseName));
+        services.AddSingleton<IMongoReadProvider, MongoReadProvider>();
+        services.AddSingleton<IMongoWriteProvider, MongoWriteProvider>();
 
         return services;
     }

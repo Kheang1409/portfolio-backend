@@ -1,6 +1,9 @@
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Domain.Entities;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace KaiAssistant.Application.Services;
 
@@ -16,7 +19,7 @@ public class AiPromptBuilder : IAiPromptBuilder
     public string BuildSystemPrompt()
     {
         var basePrompt = string.IsNullOrWhiteSpace(_options.Value.SystemPrompt)
-            ? "You are Kai Taing's professional AI assistant. Represent Kai professionally and help visitors learn about his background, skills, and experience."
+            ? "You are Hang Kheang Taing's professional AI assistant. Represent Kheang professionally and help visitors learn about his background, skills, and experience."
             : _options.Value.SystemPrompt;
 
         var guardrails = @"
@@ -92,5 +95,70 @@ public class AiPromptBuilder : IAiPromptBuilder
             maxOutputTokens,
             candidateCount
         };
+    }
+
+    public string NormalizeInput(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return string.Empty;
+        }
+
+        var compact = Regex.Replace(input.Trim(), "\\s+", " ");
+        return Regex.Replace(compact, "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]", string.Empty);
+    }
+
+    public string NormalizeContextBlock(AssistantContext? context)
+    {
+        if (context is null)
+        {
+            return string.Empty;
+        }
+
+        var lines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(context.SystemPersona))
+        {
+            lines.Add($"System persona: {NormalizeInput(context.SystemPersona)}");
+        }
+
+        if (context.UserProfile is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(context.UserProfile.DisplayName))
+            {
+                lines.Add($"User display name: {NormalizeInput(context.UserProfile.DisplayName)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(context.UserProfile.Locale))
+            {
+                lines.Add($"User locale: {NormalizeInput(context.UserProfile.Locale)}");
+            }
+        }
+
+        if (context.Metadata is { Count: > 0 })
+        {
+            foreach (var pair in context.Metadata
+                         .Where(x => !string.IsNullOrWhiteSpace(x.Key) && !string.IsNullOrWhiteSpace(x.Value))
+                         .DistinctBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                         .Take(20))
+            {
+                lines.Add($"Meta-{NormalizeInput(pair.Key)}: {NormalizeInput(pair.Value)}");
+            }
+        }
+
+        return lines.Count == 0
+            ? string.Empty
+            : "Request context:\n" + string.Join("\n", lines);
+    }
+
+    public string ComputePromptHash(string question, ConversationMessage[]? history, string resumeContext, AssistantContext? context)
+    {
+        var historyText = history is null
+            ? string.Empty
+            : string.Join('|', history.Select(x => $"{NormalizeInput(x.Role)}:{NormalizeInput(x.Content)}"));
+
+        var contextText = NormalizeContextBlock(context);
+        var material = $"q:{NormalizeInput(question)}|h:{historyText}|r:{NormalizeInput(resumeContext)}|c:{contextText}";
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(material));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

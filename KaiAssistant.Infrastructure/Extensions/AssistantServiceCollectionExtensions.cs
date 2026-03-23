@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using KaiAssistant.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using Polly;
+using Polly.Registry;
 using System.Net;
 using KaiAssistant.Application.Services;
 
@@ -100,16 +101,26 @@ public static class AssistantServiceCollectionExtensions
             opts.CandidateCount = candidateCount;
         });
 
+        var registry = services.AddPolicyRegistry();
+
+        registry.Add("gemini-retry", Policy<HttpResponseMessage>
+            .Handle<HttpRequestException>()
+            .OrResult(msg => msg.StatusCode == HttpStatusCode.ServiceUnavailable)
+            .WaitAndRetryAsync(5, retryAttempt =>
+                TimeSpan.FromMilliseconds(Math.Min(3000, 250 * Math.Pow(2, retryAttempt - 1))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 200))));
+
+        registry.Add("gemini-timeout", Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(15)));
+
         services.AddHttpClient("Gemini", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         })
+        .AddPolicyHandlerFromRegistry("gemini-timeout")
         .AddPolicyHandler((sp, request) =>
         {
-            var jitterer = new Random();
             return Policy<HttpResponseMessage>
                 .Handle<HttpRequestException>()
-                .OrResult(msg => msg.StatusCode == HttpStatusCode.ServiceUnavailable || (int)msg.StatusCode == 429)
+                .OrResult(msg => msg.StatusCode == HttpStatusCode.ServiceUnavailable)
                 .WaitAndRetryAsync(5, retryAttempt =>
                     TimeSpan.FromMilliseconds(Math.Min(3000, 250 * Math.Pow(2, retryAttempt - 1))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 200)),
                     onRetry: (outcome, timespan, retryCount, context) =>
@@ -118,7 +129,31 @@ public static class AssistantServiceCollectionExtensions
                         logger?.LogWarning("Retry {Retry} for {Request} due to {Reason}", retryCount, request.RequestUri, outcome.Exception?.Message ?? outcome.Result?.StatusCode.ToString());
                     });
         })
-        .AddTransientHttpErrorPolicy(policyBuilder => policyBuilder.CircuitBreakerAsync(5, TimeSpan.FromSeconds(30)));
+        .AddPolicyHandler((sp, _) =>
+        {
+            var resilience = sp.GetRequiredService<IResilienceStatusProvider>();
+            var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("GeminiHttpClient");
+
+            return Policy<HttpResponseMessage>
+                .Handle<HttpRequestException>()
+                .OrResult(msg => msg.StatusCode == HttpStatusCode.ServiceUnavailable)
+                .CircuitBreakerAsync(
+                    5,
+                    TimeSpan.FromSeconds(30),
+                    (result, breakDelay) =>
+                    {
+                        var reason = result.Exception?.Message ?? result.Result?.StatusCode.ToString() ?? "unknown";
+                        resilience.RecordFailure("ai", reason);
+                        resilience.RecordCircuitState("ai", "Open");
+                        logger?.LogWarning("AI circuit opened for {BreakDelay} due to {Reason}", breakDelay, reason);
+                    },
+                    () =>
+                    {
+                        resilience.RecordCircuitState("ai", "Closed");
+                        logger?.LogInformation("AI circuit reset.");
+                    },
+                    () => resilience.RecordCircuitState("ai", "HalfOpen"));
+        });
 
         services.AddSingleton<IGeminiGateway, Gateways.GeminiGateway>();
         services.AddScoped<IAssistantService, AssistantService>();

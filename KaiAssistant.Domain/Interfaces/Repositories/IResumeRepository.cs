@@ -4,8 +4,8 @@ namespace KaiAssistant.Domain.Interfaces.Repositories;
 
 public interface IResumeRepository
 {
-	Task<Resume?> GetByIdAsync(string id);
-	Task<Resume?> GetLatestAsync();
-	Task InsertAsync(Resume resume);
+	Task<Resume?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
+	Task<Resume?> GetLatestAsync(CancellationToken cancellationToken = default);
+	Task InsertAsync(Resume resume, CancellationToken cancellationToken = default);
 }
 

@@ -13,6 +13,8 @@ public class Resume
     [BsonRepresentation(BsonType.ObjectId)]
     public string? Id { get; set; }
 
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
     public Personals? Personals { get; set; }
     public string Summary { get; set; } = string.Empty;
 

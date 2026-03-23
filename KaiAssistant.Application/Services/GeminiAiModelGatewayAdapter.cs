@@ -1,4 +1,5 @@
 using KaiAssistant.Application.Interfaces;
+using KaiAssistant.Application.Diagnostics;
 
 namespace KaiAssistant.Application.Services;
 
@@ -21,5 +22,15 @@ public class GeminiAiModelGatewayAdapter : IAiModelGateway
         var payloadJson = System.Text.Json.JsonSerializer.Serialize(payload);
         var result = await _gemini.SendGenerationRequestAsync(payloadJson, new[] { modelName }, cancellationToken).ConfigureAwait(false);
         return result.Body;
+    }
+
+    public IAsyncEnumerable<AiGatewayStreamChunk> StreamGenerationRequestAsync(
+        string payloadJson,
+        IEnumerable<string> models,
+        int maxDurationSeconds,
+        int maxTokens,
+        CancellationToken cancellationToken = default)
+    {
+        return _gemini.StreamGenerationRequestAsync(payloadJson, models, maxDurationSeconds, maxTokens, cancellationToken);
     }
 }

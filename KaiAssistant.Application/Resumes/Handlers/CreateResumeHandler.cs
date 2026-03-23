@@ -1,5 +1,6 @@
 using KaiAssistant.Application.Resumes.Commands;
-using KaiAssistant.Domain.Interfaces.Repositories;
+using KaiAssistant.Application.Events;
+using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Domain.Entities.Resumes;
 using MediatR;
 
@@ -7,16 +8,22 @@ namespace KaiAssistant.Application.Resumes.Handlers;
 
 public class CreateResumeHandler : IRequestHandler<CreateResumeCommand, Resume>
 {
-    private readonly IResumeRepository _repository;
+    private readonly IResumeWriteService _resumeWriteService;
 
-    public CreateResumeHandler(IResumeRepository repository)
+    public CreateResumeHandler(IResumeWriteService resumeWriteService)
     {
-        _repository = repository;
+        _resumeWriteService = resumeWriteService;
     }
 
     public async Task<Resume> Handle(CreateResumeCommand request, CancellationToken cancellationToken)
     {
-        await _repository.InsertAsync(request.Resume);
-        return request.Resume;
+        request.Resume.CreatedAtUtc = DateTimeOffset.UtcNow;
+
+        var integrationEvent = new ResumeCreatedIntegrationEvent(request.Resume.Id);
+        var outboxMessage = OutboxMessageFactory.Create(integrationEvent);
+
+        return await _resumeWriteService
+            .CreateWithOutboxAsync(request.Resume, outboxMessage, cancellationToken)
+            .ConfigureAwait(false);
     }
 }

@@ -16,6 +16,12 @@ Parameters:
     NoEcho: true
     Description: MongoDB Atlas connection string
 
+  RedisConnectionString:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Redis connection string (supports rediss:// for managed Redis)
+
   MongoDatabaseName:
     Type: String
     Default: kai-data-model
@@ -126,6 +132,7 @@ Resources:
         Variables:
           MONGODB_CONNECTIONSTRING: !Ref MongoConnectionString
           MONGODB_DATABASE: !Ref MongoDatabaseName
+          REDIS__CONNECTIONSTRING: !Ref RedisConnectionString
           DOTNET_ENVIRONMENT: !Ref DotNetEnvironment
           ALLOWED_ORIGINS: !Ref AllowedOrigins
           SMTP_SERVER: !Ref SmtpServer

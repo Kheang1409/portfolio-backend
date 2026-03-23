@@ -8,6 +8,7 @@ using Moq;
 using FluentAssertions;
 using KaiAssistant.Application.Services;
 using KaiAssistant.Application.Interfaces;
+using KaiAssistant.Application.Diagnostics;
 using KaiAssistant.Domain.Entities;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,7 @@ public class AssistantServiceTests
     private readonly Mock<IResumeContextProvider> _mockResumeProvider;
     private readonly Mock<IAiPromptBuilder> _mockPromptBuilder;
     private readonly Mock<IAiModelGateway> _mockGateway;
+    private readonly Mock<IModelOrchestrator> _mockOrchestrator;
     private readonly Mock<ILogger<AssistantService>> _mockLogger;
     private readonly IOptions<GeminiSettings> _geminiOptions;
     private readonly AssistantService _assistantService;
@@ -30,6 +32,7 @@ public class AssistantServiceTests
         _mockResumeProvider = new Mock<IResumeContextProvider>();
         _mockPromptBuilder = new Mock<IAiPromptBuilder>();
         _mockGateway = new Mock<IAiModelGateway>();
+        _mockOrchestrator = new Mock<IModelOrchestrator>();
         _mockLogger = new Mock<ILogger<AssistantService>>();
 
         var geminiSettings = new GeminiSettings
@@ -41,10 +44,27 @@ public class AssistantServiceTests
         };
 
         _geminiOptions = Options.Create(geminiSettings);
+        _mockOrchestrator
+            .Setup(x => x.BuildDecisionAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiRoutingDecision
+            {
+                SelectedPrimaryModel = "gemini-1.5-pro",
+                CandidateModels = new[] { "gemini-1.5-pro" },
+                EstimatedCostUsd = 0.001m
+            });
+
+        _mockPromptBuilder.Setup(x => x.NormalizeInput(It.IsAny<string>()))
+            .Returns<string>(x => x);
+        _mockPromptBuilder.Setup(x => x.NormalizeContextBlock(It.IsAny<AssistantContext?>()))
+            .Returns(string.Empty);
+        _mockPromptBuilder.Setup(x => x.ComputePromptHash(It.IsAny<string>(), It.IsAny<ConversationMessage[]?>(), It.IsAny<string>(), It.IsAny<AssistantContext?>()))
+            .Returns("hash");
+
         _assistantService = new AssistantService(
             _mockResumeProvider.Object,
             _mockPromptBuilder.Object,
             _mockGateway.Object,
+            _mockOrchestrator.Object,
             _geminiOptions,
             _mockLogger.Object
         );
@@ -85,11 +105,11 @@ public class AssistantServiceTests
             .ReturnsAsync((JsonSerializer.Serialize(geminiResponse), "gemini-1.5-pro"));
 
         // Act
-        var result = await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        var result = await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
-        result.Should().NotBeNullOrEmpty();
-        result.Should().Contain("experience");
+        result.Text.Should().NotBeNullOrEmpty();
+        result.Text.Should().Contain("experience");
         _mockGateway.Verify(x => x.SendGenerationRequestAsync(It.IsAny<string>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -97,10 +117,10 @@ public class AssistantServiceTests
     public async Task AskQuestionAsync_WithEmptyQuestion_ShouldReturnErrorMessage()
     {
         // Act
-        var result = await _assistantService.AskQuestionAsync("", CancellationToken.None);
+        var result = await _assistantService.AskQuestionAsync("", cancellationToken: CancellationToken.None);
 
         // Assert
-        result.Should().Be("Please provide a question.");
+        result.Text.Should().Be("Please provide a question.");
         _mockGateway.Verify(x => x.SendGenerationRequestAsync(It.IsAny<string>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -142,10 +162,10 @@ public class AssistantServiceTests
             .ReturnsAsync((JsonSerializer.Serialize(geminiResponse), "gemini-1.5-pro"));
 
         // Act
-        var result = await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        var result = await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
-        result.Should().NotBeNullOrEmpty();
+        result.Text.Should().NotBeNullOrEmpty();
         // Verify payload includes note about missing resume
         var payload = JsonDocument.Parse(capturedPayload!);
         var root = payload.RootElement;
@@ -173,10 +193,10 @@ public class AssistantServiceTests
             .ReturnsAsync((null, null));
 
         // Act
-        var result = await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        var result = await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
-        result.Should().Be("I'm temporarily unavailable. Please try again later.");
+        result.Text.Should().Be("I'm temporarily unavailable. Please try again later.");
     }
 
     [Fact]
@@ -204,7 +224,7 @@ public class AssistantServiceTests
             .ReturnsAsync((JsonSerializer.Serialize(geminiResponse), "gemini-1.5-pro"));
 
         // Act
-        await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
         capturedPayload.Should().NotBeNullOrEmpty();
@@ -217,18 +237,22 @@ public class AssistantServiceTests
         // Verify first element (system prompt)
         var firstElement = contents[0];
         firstElement.TryGetProperty("role", out var role).Should().BeTrue();
-        role.GetString().Should().Be("user");
+        role.GetString().Should().Be("model");
         firstElement.TryGetProperty("parts", out var parts).Should().BeTrue();
         parts.GetArrayLength().Should().BeGreaterThan(0);
         parts[0].GetProperty("text").GetString().Should().StartWith("You are helpful.");
 
-        // Verify second element (RAG + user question)
+        // Verify second element (resume context)
         var secondElement = contents[1];
         secondElement.TryGetProperty("role", out var role2).Should().BeTrue();
-        role2.GetString().Should().Be("user");
+        role2.GetString().Should().Be("model");
         secondElement.TryGetProperty("parts", out var parts2).Should().BeTrue();
         parts2[0].GetProperty("text").GetString().Should().Contain("Resume context:");
-        parts2[0].GetProperty("text").GetString().Should().Contain("User question:");
+
+        // Verify last element is current user question
+        var lastElement = contents[contents.GetArrayLength() - 1];
+        lastElement.GetProperty("role").GetString().Should().Be("user");
+        lastElement.GetProperty("parts")[0].GetProperty("text").GetString().Should().Be(question);
     }
 
     [Fact]
@@ -256,7 +280,7 @@ public class AssistantServiceTests
             .ReturnsAsync((JsonSerializer.Serialize(geminiResponse), "gemini-1.5-pro"));
 
         // Act
-        await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
         capturedPayload.Should().NotBeNullOrEmpty();
@@ -313,7 +337,7 @@ public class AssistantServiceTests
             .ReturnsAsync((JsonSerializer.Serialize(geminiResponse), "gemini-1.5-pro"));
 
         // Act
-        await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
         capturedPayload.Should().NotBeNullOrEmpty();
@@ -350,10 +374,10 @@ public class AssistantServiceTests
             .ReturnsAsync((JsonSerializer.Serialize(new { error = "Something went wrong" }), "gemini-1.5-pro"));
 
         // Act
-        var result = await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        var result = await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
-        result.Should().Be("I couldn't generate a suitable response right now.");
+        result.Text.Should().Be("I couldn't generate a suitable response right now.");
     }
 
     [Fact]
@@ -365,7 +389,7 @@ public class AssistantServiceTests
 
         var resumeChunks = new[]
         {
-            new ResumeChunk { Label = "Personal Details", Content = "Legal name: Kai Taing\nPhone: 123-456" },
+            new ResumeChunk { Label = "Personal Details", Content = "Legal name: Hang Kheang Taing\nPhone: 123-456" },
             new ResumeChunk { Label = "Experience", Content = "Built APIs" }
         };
 
@@ -392,7 +416,7 @@ public class AssistantServiceTests
             .ReturnsAsync((JsonSerializer.Serialize(geminiResponse), "gemini-1.5-pro"));
 
         // Act
-        await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
         capturedPayload.Should().NotBeNullOrEmpty();
@@ -412,7 +436,7 @@ public class AssistantServiceTests
 
         var resumeChunks = new[]
         {
-            new ResumeChunk { Label = "Personal Details", Content = "Legal name: Kai Taing\nPhone: 123-456" },
+            new ResumeChunk { Label = "Personal Details", Content = "Legal name: Hang Kheang Taing\nPhone: 123-456" },
             new ResumeChunk { Label = "Skills", Content = "C#, .NET" }
         };
 
@@ -439,7 +463,7 @@ public class AssistantServiceTests
             .ReturnsAsync((JsonSerializer.Serialize(geminiResponse), "gemini-1.5-pro"));
 
         // Act
-        await _assistantService.AskQuestionAsync(question, CancellationToken.None);
+        await _assistantService.AskQuestionAsync(question, cancellationToken: CancellationToken.None);
 
         // Assert
         capturedPayload.Should().NotBeNullOrEmpty();

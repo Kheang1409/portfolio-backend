@@ -16,6 +16,6 @@ public class GetLatestResumeHandler : IRequestHandler<GetLatestResumeQuery, Resu
 
     public async Task<Resume?> Handle(GetLatestResumeQuery request, CancellationToken cancellationToken)
     {
-        return await _repository.GetLatestAsync();
+        return await _repository.GetLatestAsync(cancellationToken).ConfigureAwait(false);
     }
 }

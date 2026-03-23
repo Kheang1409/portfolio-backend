@@ -1,7 +1,10 @@
 using KaiAssistant.Application.Interfaces;
+using KaiAssistant.Application.Cache;
 using KaiAssistant.Domain.Entities;
 using KaiAssistant.Domain.Interfaces.Repositories;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
+using System.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -12,24 +15,32 @@ namespace KaiAssistant.Application.Services;
 public class ResumeContextProvider : IResumeContextProvider
 {
     private readonly IResumeRepository _resumeRepository;
+    private readonly ICacheService _cacheService;
     private readonly ILogger<ResumeContextProvider> _logger;
 
     private ResumeChunk[] _resumeChunks = Array.Empty<ResumeChunk>();
     private const int ChunkSize = 500;
 
-    public ResumeContextProvider(IResumeRepository resumeRepository, ILogger<ResumeContextProvider> logger)
+    public ResumeContextProvider(IResumeRepository resumeRepository, ICacheService cacheService, ILogger<ResumeContextProvider> logger)
     {
         _resumeRepository = resumeRepository;
+        _cacheService = cacheService;
         _logger = logger;
     }
 
     public async Task<ResumeChunk[]> GetResumeChunksAsync(CancellationToken cancellationToken = default)
     {
-        // If already loaded, return snapshot. Consumers can call again if they want fresh data.
         if (_resumeChunks.Length > 0)
             return _resumeChunks;
 
-        var resume = await _resumeRepository.GetLatestAsync().ConfigureAwait(false);
+        var cached = await _cacheService.GetAsync<ResumeChunk[]>(CacheKeys.ResumeChunks(), cancellationToken).ConfigureAwait(false);
+        if (cached is { Length: > 0 })
+        {
+            _resumeChunks = cached;
+            return _resumeChunks;
+        }
+
+        var resume = await _resumeRepository.GetLatestAsync(cancellationToken).ConfigureAwait(false);
         if (resume == null)
         {
             _logger.LogInformation("No resume found in database. Starting without resume.");
@@ -126,11 +137,19 @@ public class ResumeContextProvider : IResumeContextProvider
         }
 
         _resumeChunks = newList.ToArray();
+        await _cacheService.SetAsync(CacheKeys.ResumeChunks(), _resumeChunks, TimeSpan.FromMinutes(2), cancellationToken).ConfigureAwait(false);
         return _resumeChunks;
     }
 
     public async Task<ResumeChunk[]> GetRelevantChunksAsync(string question, CancellationToken cancellationToken = default)
     {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(question.ToLowerInvariant())));
+        var cached = await _cacheService.GetAsync<ResumeChunk[]>(CacheKeys.RelevantChunks(hash), cancellationToken).ConfigureAwait(false);
+        if (cached is { Length: > 0 })
+        {
+            return cached;
+        }
+
         var snapshot = await GetResumeChunksAsync(cancellationToken).ConfigureAwait(false);
         if (snapshot == null || snapshot.Length == 0) return Array.Empty<ResumeChunk>();
 
@@ -177,7 +196,9 @@ public class ResumeContextProvider : IResumeContextProvider
             .Take(maxChunks)
             .Select(x => x.Chunk)
             .ToList();
-        return topChunks.Any() ? topChunks.ToArray() : snapshot.Take(maxChunks).ToArray();
+        var result = topChunks.Any() ? topChunks.ToArray() : snapshot.Take(maxChunks).ToArray();
+        await _cacheService.SetAsync(CacheKeys.RelevantChunks(hash), result, TimeSpan.FromSeconds(45), cancellationToken).ConfigureAwait(false);
+        return result;
     }
 
     private void AddChunkToList(List<ResumeChunk> list, string label, string content, string source = "")

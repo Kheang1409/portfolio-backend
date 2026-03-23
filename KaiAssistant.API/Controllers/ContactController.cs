@@ -16,11 +16,11 @@ public class ContactController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> SendMessage([FromBody] ContactCommand command)
+    public async Task<IActionResult> SendMessage([FromBody] ContactCommand command, CancellationToken cancellationToken)
     {
         if (command == null)
             return BadRequest(ModelState);
-        await _mediator.Send(command);
+        await _mediator.Send(command, cancellationToken).ConfigureAwait(false);
         return Ok(new { Message = "Email sent successfully." });
     }
 }

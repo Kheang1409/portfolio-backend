@@ -68,6 +68,7 @@ jobs:
             --s3-bucket kaiassistant-lambda-deployments \
             --parameter-overrides \
               MongoConnectionString="${{ secrets.MONGODB_CONNECTIONSTRING }}" \
+              RedisConnectionString="${{ secrets.REDIS__CONNECTIONSTRING }}" \
               MongoDatabaseName="${{ secrets.MONGODB_DATABASE }}" \
               AllowedOrigins="${{ secrets.ALLOWED_ORIGINS }}" \
               SmtpSenderEmail="${{ secrets.SMTP_SENDER_EMAIL }}" \

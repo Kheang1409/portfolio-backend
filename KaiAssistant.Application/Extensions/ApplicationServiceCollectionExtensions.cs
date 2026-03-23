@@ -6,6 +6,8 @@ using KaiAssistant.Application.AskAssistants.Commands;
 using KaiAssistant.Application.Resumes.Commands;
 using KaiAssistant.Application.Resumes.Queries;
 using KaiAssistant.Application.Services;
+using MediatR;
+using KaiAssistant.Application.Behaviors;
 
 namespace KaiAssistant.Application.Extensions;
 
@@ -22,7 +24,7 @@ public static class ApplicationServiceCollectionExtensions
             cfg.RegisterServicesFromAssemblyContaining<GetResumeByIdQuery>();
         });
         services.AddValidatorsFromAssemblyContaining<AskAssistantCommandValidator>();
-        services.AddValidatorsFromAssemblyContaining<ContactCommandValidator>();
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         // AI services
         services.AddSingleton<IAiPromptBuilder, AiPromptBuilder>();
         services.AddScoped<IResumeContextProvider, ResumeContextProvider>();

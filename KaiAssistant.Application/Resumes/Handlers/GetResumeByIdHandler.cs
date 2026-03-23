@@ -16,6 +16,6 @@ public class GetResumeByIdHandler : IRequestHandler<GetResumeByIdQuery, Resume?>
 
     public async Task<Resume?> Handle(GetResumeByIdQuery request, CancellationToken cancellationToken)
     {
-        return await _repository.GetByIdAsync(request.Id);
+        return await _repository.GetByIdAsync(request.Id, cancellationToken).ConfigureAwait(false);
     }
 }

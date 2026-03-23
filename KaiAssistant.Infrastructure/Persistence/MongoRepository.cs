@@ -1,5 +1,6 @@
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Domain.Interfaces.Repositories;
+using KaiAssistant.Infrastructure.Mongo;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
@@ -7,17 +8,19 @@ using MongoDB.Driver;
 namespace KaiAssistant.Infrastructure.Persistence;
 public class MongoRepository<T> : IRepository<T> where T : class
 {
-    private readonly IMongoCollection<BsonDocument> _collection;
+    private readonly IMongoCollection<BsonDocument> _readCollection;
+    private readonly IMongoCollection<BsonDocument> _writeCollection;
 
-    public MongoRepository(IMongoDatabase database)
+    public MongoRepository(IMongoReadProvider readProvider, IMongoWriteProvider writeProvider)
     {
         var name = typeof(T).Name.ToLowerInvariant() + "s";
-        _collection = database.GetCollection<BsonDocument>(name);
+        _readCollection = readProvider.Database.GetCollection<BsonDocument>(name);
+        _writeCollection = writeProvider.Database.GetCollection<BsonDocument>(name);
     }
 
     public async Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        var docs = await _collection.Find(Builders<BsonDocument>.Filter.Empty).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var docs = await _readCollection.Find(Builders<BsonDocument>.Filter.Empty).ToListAsync(cancellationToken).ConfigureAwait(false);
         return docs.Select(d => BsonSerializer.Deserialize<T>(d));
     }
 
@@ -25,8 +28,8 @@ public class MongoRepository<T> : IRepository<T> where T : class
     {
         var session = uowSession?.NativeSession as IClientSessionHandle;
         var docs = session == null
-            ? await _collection.Find(Builders<BsonDocument>.Filter.Empty).ToListAsync(cancellationToken).ConfigureAwait(false)
-            : await _collection.Find(session, Builders<BsonDocument>.Filter.Empty).ToListAsync(cancellationToken).ConfigureAwait(false);
+            ? await _readCollection.Find(Builders<BsonDocument>.Filter.Empty).ToListAsync(cancellationToken).ConfigureAwait(false)
+            : await _readCollection.Find(session, Builders<BsonDocument>.Filter.Empty).ToListAsync(cancellationToken).ConfigureAwait(false);
         return docs.Select(d => BsonSerializer.Deserialize<T>(d));
     }
 
@@ -35,13 +38,13 @@ public class MongoRepository<T> : IRepository<T> where T : class
         if (ObjectId.TryParse(id, out var oid))
         {
             var filter = Builders<BsonDocument>.Filter.Eq("_id", oid);
-            var doc = await _collection.Find(filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            var doc = await _readCollection.Find(filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
             if (doc == null) return null;
             return BsonSerializer.Deserialize<T>(doc);
         }
 
         var f2 = Builders<BsonDocument>.Filter.Eq("_id", id);
-        var doc2 = await _collection.Find(f2).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        var doc2 = await _readCollection.Find(f2).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (doc2 == null) return null;
         return BsonSerializer.Deserialize<T>(doc2);
     }
@@ -53,8 +56,8 @@ public class MongoRepository<T> : IRepository<T> where T : class
             : Builders<BsonDocument>.Filter.Eq("_id", id);
         var session = uowSession?.NativeSession as IClientSessionHandle;
         var doc = session == null
-            ? await _collection.Find(filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
-            : await _collection.Find(session, filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            ? await _readCollection.Find(filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            : await _readCollection.Find(session, filter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         if (doc == null) return null;
         return BsonSerializer.Deserialize<T>(doc);
     }
@@ -66,7 +69,7 @@ public class MongoRepository<T> : IRepository<T> where T : class
             BsonDocument bd => bd,
             _ => entity.ToBsonDocument()
         };
-        await _collection.InsertOneAsync(doc, cancellationToken: cancellationToken).ConfigureAwait(false);
+        await _writeCollection.InsertOneAsync(doc, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task InsertAsync(T entity, IUnitOfWorkSession? uowSession, CancellationToken cancellationToken = default)
@@ -79,11 +82,11 @@ public class MongoRepository<T> : IRepository<T> where T : class
         var session = uowSession?.NativeSession as IClientSessionHandle;
         if (session == null)
         {
-            await _collection.InsertOneAsync(doc, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await _writeCollection.InsertOneAsync(doc, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await _collection.InsertOneAsync(session, doc, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await _writeCollection.InsertOneAsync(session, doc, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -93,12 +96,12 @@ public class MongoRepository<T> : IRepository<T> where T : class
         {
             var filter = Builders<BsonDocument>.Filter.Eq("_id", id);
             var doc = entity.ToBsonDocument();
-            await _collection.ReplaceOneAsync(filter, doc, new ReplaceOptions { IsUpsert = false }, cancellationToken).ConfigureAwait(false);
+            await _writeCollection.ReplaceOneAsync(filter, doc, new ReplaceOptions { IsUpsert = false }, cancellationToken).ConfigureAwait(false);
             return;
         }
         var filterOid = Builders<BsonDocument>.Filter.Eq("_id", oid);
         var docOid = entity.ToBsonDocument();
-        await _collection.ReplaceOneAsync(filterOid, docOid, new ReplaceOptions { IsUpsert = false }, cancellationToken).ConfigureAwait(false);
+        await _writeCollection.ReplaceOneAsync(filterOid, docOid, new ReplaceOptions { IsUpsert = false }, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task ReplaceAsync(string id, T entity, IUnitOfWorkSession? uowSession, CancellationToken cancellationToken = default)
@@ -109,9 +112,9 @@ public class MongoRepository<T> : IRepository<T> where T : class
             : Builders<BsonDocument>.Filter.Eq("_id", id);
         var doc = entity.ToBsonDocument();
         if (session == null)
-            await _collection.ReplaceOneAsync(filter, doc, new ReplaceOptions { IsUpsert = false }, cancellationToken).ConfigureAwait(false);
+            await _writeCollection.ReplaceOneAsync(filter, doc, new ReplaceOptions { IsUpsert = false }, cancellationToken).ConfigureAwait(false);
         else
-            await _collection.ReplaceOneAsync(session, filter, doc, new ReplaceOptions { IsUpsert = false }, cancellationToken).ConfigureAwait(false);
+            await _writeCollection.ReplaceOneAsync(session, filter, doc, new ReplaceOptions { IsUpsert = false }, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(string id, CancellationToken cancellationToken = default)
@@ -119,7 +122,7 @@ public class MongoRepository<T> : IRepository<T> where T : class
         FilterDefinition<BsonDocument> filter;
         if (ObjectId.TryParse(id, out var oid)) filter = Builders<BsonDocument>.Filter.Eq("_id", oid);
         else filter = Builders<BsonDocument>.Filter.Eq("_id", id);
-        await _collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
+        await _writeCollection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(string id, IUnitOfWorkSession? uowSession, CancellationToken cancellationToken = default)
@@ -129,8 +132,8 @@ public class MongoRepository<T> : IRepository<T> where T : class
         else filter = Builders<BsonDocument>.Filter.Eq("_id", id);
         var session = uowSession?.NativeSession as IClientSessionHandle;
         if (session == null)
-            await _collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
+            await _writeCollection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         else
-            await _collection.DeleteOneAsync(session, filter, null, cancellationToken).ConfigureAwait(false);
+            await _writeCollection.DeleteOneAsync(session, filter, null, cancellationToken).ConfigureAwait(false);
     }
 }

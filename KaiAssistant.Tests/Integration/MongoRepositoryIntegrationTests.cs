@@ -1,9 +1,11 @@
 using Mongo2Go;
 using MongoDB.Driver;
 using KaiAssistant.Infrastructure.Persistence;
+using KaiAssistant.Infrastructure.Mongo;
 using KaiAssistant.Domain.Entities.Resumes;
 using KaiAssistant.Domain.Interfaces.Repositories;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -20,8 +22,12 @@ public class MongoRepositoryIntegrationTests
         var db = client.GetDatabase("testdb");
 
         var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(new MongoSettings { ConnectionString = runner.ConnectionString, DatabaseName = "testdb" });
         services.AddSingleton<IMongoClient>(client);
-        services.AddSingleton(db);
+        services.AddSingleton<IMongoDatabase>(db);
+        services.AddSingleton<IMongoReadProvider, MongoReadProvider>();
+        services.AddSingleton<IMongoWriteProvider, MongoWriteProvider>();
         services.AddScoped(typeof(IRepository<>), typeof(MongoRepository<>));
         var sp = services.BuildServiceProvider();
 
