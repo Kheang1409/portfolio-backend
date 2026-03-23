@@ -158,7 +158,7 @@ Resources:
           MONGODB_CONNECTIONSTRING: !Ref MongoConnectionString
           MONGODB_DATABASE: !Ref MongoDatabaseName
           REDIS__CONNECTIONSTRING: !Ref RedisConnectionString
-          ASPNETCORE_ENVIRONMENT: !Ref ASPNetCore_Environment
+          ASPNETCORE_ENVIRONMENT: !Ref ASPNetCoreEnvironment
           ALLOWED_ORIGINS: !Ref AllowedOrigins
           SMTP_SERVER: !Ref SmtpServer
           SMTP_PORT: !Ref SmtpPort
