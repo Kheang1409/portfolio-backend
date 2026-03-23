@@ -18,7 +18,6 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
-using StackExchange.Redis;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -67,6 +66,7 @@ builder.Services.AddOpenTelemetry()
         .AddMeter("KaiAssistant.ApiEndpoints")
         .AddMeter("KaiAssistant.RateLimiting")
         .AddMeter("KaiAssistant.AiModels")
+        .AddMeter("KaiAssistant.Redis")
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation());
 
@@ -135,24 +135,6 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IClientContextAccessor, HttpClientContextAccessor>();
 builder.Services.AddSingleton<IRateLimitTelemetry, RateLimitTelemetry>();
 builder.Services.AddSingleton<IOperationalSimulationState, OperationalSimulationState>();
-
-var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
-if (!string.IsNullOrWhiteSpace(redisConnectionString))
-{
-    var parsedRedisOptions = ConfigurationOptions.Parse(redisConnectionString, true);
-    parsedRedisOptions.AbortOnConnectFail = false;
-    parsedRedisOptions.ConnectRetry = Math.Max(parsedRedisOptions.ConnectRetry, 5);
-    parsedRedisOptions.ConnectTimeout = Math.Max(parsedRedisOptions.ConnectTimeout, 5000);
-    parsedRedisOptions.SyncTimeout = Math.Max(parsedRedisOptions.SyncTimeout, 5000);
-    parsedRedisOptions.ReconnectRetryPolicy = new ExponentialRetry(5000);
-
-    if (redisConnectionString.StartsWith("rediss://", StringComparison.OrdinalIgnoreCase))
-    {
-        parsedRedisOptions.Ssl = true;
-    }
-
-    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(parsedRedisOptions));
-}
 
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
@@ -262,10 +244,15 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
 
     if (flags.EnableCache)
     {
-        var redisConn = configuration["Redis:ConnectionString"];
+        var redisConn = configuration["REDIS_URL"] ?? configuration["Redis:ConnectionString"];
         if (string.IsNullOrWhiteSpace(redisConn))
         {
             throw new InvalidOperationException("Redis configuration is required when cache feature is enabled in production.");
+        }
+
+        if (!redisConn.StartsWith("rediss://", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Redis connection must use rediss:// in production.");
         }
     }
 

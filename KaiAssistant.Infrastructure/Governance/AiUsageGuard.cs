@@ -36,7 +36,7 @@ public sealed class AiUsageGuard : IAiUsageGuard
         _simulation = simulation;
     }
 
-    public Task<AiUsageDecision> EvaluateAsync(
+    public async Task<AiUsageDecision> EvaluateAsync(
         string question,
         ConversationMessage[]? history,
         AssistantContext? context,
@@ -44,14 +44,18 @@ public sealed class AiUsageGuard : IAiUsageGuard
     {
         var opts = _options.CurrentValue;
 
-        if (_simulation?.ForceAiThrottleUntilUtc is DateTimeOffset throttleUntil && throttleUntil > DateTimeOffset.UtcNow)
+        var throttleUntil = _simulation is null
+            ? null
+            : await _simulation.GetForceAiThrottleUntilUtcAsync(cancellationToken).ConfigureAwait(false);
+
+        if (throttleUntil is DateTimeOffset simulatedUntil && simulatedUntil > DateTimeOffset.UtcNow)
         {
-            return Task.FromResult(Block("simulated_ai_throttle", "AI service is temporarily throttled for load testing. Please retry later."));
+            return Block("simulated_ai_throttle", "AI service is temporarily throttled for load testing. Please retry later.");
         }
 
         if (!opts.Enabled)
         {
-            return Task.FromResult(new AiUsageDecision
+            return new AiUsageDecision
             {
                 Allowed = true,
                 Question = Sanitize(question),
@@ -59,13 +63,13 @@ public sealed class AiUsageGuard : IAiUsageGuard
                 Context = context,
                 EstimatedInputTokens = EstimateTokens(question, history, opts),
                 EstimatedCostUsd = EstimateCostUsd(EstimateTokens(question, history, opts))
-            });
+            };
         }
 
         var clientIp = _clientContextAccessor.GetClientIp();
         if (!IsRequestRateAllowed(clientIp, opts.MaxRequestsPerMinutePerIp))
         {
-            return Task.FromResult(Block("rate_limit", "Too many AI requests from your IP. Please wait a minute and retry."));
+            return Block("rate_limit", "Too many AI requests from your IP. Please wait a minute and retry.");
         }
 
         var sanitizedQuestion = Sanitize(question);
@@ -76,7 +80,7 @@ public sealed class AiUsageGuard : IAiUsageGuard
         {
             if (!opts.TruncateOversizedInput)
             {
-                return Task.FromResult(Block("input_too_large", "Your input is too large. Please shorten your message and try again."));
+                return Block("input_too_large", "Your input is too large. Please shorten your message and try again.");
             }
 
             sanitizedQuestion = sanitizedQuestion[..Math.Min(sanitizedQuestion.Length, opts.MaxInputChars)];
@@ -87,7 +91,7 @@ public sealed class AiUsageGuard : IAiUsageGuard
         {
             if (!opts.TruncateOversizedInput)
             {
-                return Task.FromResult(Block("tokens_exceeded", "Your request is too large for AI processing. Please shorten it and retry."));
+                return Block("tokens_exceeded", "Your request is too large for AI processing. Please shorten it and retry.");
             }
 
             var maxCharsFromTokens = opts.MaxTokensPerRequest * Math.Max(1, opts.EstimatedCharsPerToken);
@@ -98,7 +102,7 @@ public sealed class AiUsageGuard : IAiUsageGuard
 
         var wasTruncated = !string.Equals(sanitizedQuestion, question, StringComparison.Ordinal);
         var estimatedCost = EstimateCostUsd(estimatedTokens);
-        return Task.FromResult(new AiUsageDecision
+        return new AiUsageDecision
         {
             Allowed = true,
             Question = sanitizedQuestion,
@@ -107,7 +111,7 @@ public sealed class AiUsageGuard : IAiUsageGuard
             EstimatedInputTokens = estimatedTokens,
             EstimatedCostUsd = estimatedCost,
             Truncated = wasTruncated
-        });
+        };
     }
 
     public void RecordTokensUsed(int inputTokens, int outputTokens)

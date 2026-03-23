@@ -2,9 +2,9 @@ namespace KaiAssistant.Application.Interfaces;
 
 public interface IOperationalSimulationState
 {
-    DateTimeOffset? ForceAiThrottleUntilUtc { get; }
-    int OutboxArtificialDelayMs { get; }
+    Task<DateTimeOffset?> GetForceAiThrottleUntilUtcAsync(CancellationToken cancellationToken = default);
+    Task<int> GetOutboxArtificialDelayMsAsync(CancellationToken cancellationToken = default);
 
-    void ForceAiThrottleFor(TimeSpan duration);
-    void SetOutboxArtificialDelay(int delayMs);
+    Task ForceAiThrottleForAsync(TimeSpan duration, CancellationToken cancellationToken = default);
+    Task SetOutboxArtificialDelayAsync(int delayMs, CancellationToken cancellationToken = default);
 }

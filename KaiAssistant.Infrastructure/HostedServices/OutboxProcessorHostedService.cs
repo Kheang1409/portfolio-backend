@@ -80,7 +80,9 @@ public sealed class OutboxProcessorHostedService : BackgroundService
                 var idempotencyStore = scope.ServiceProvider.GetRequiredService<IEventIdempotencyStore>();
                 var simulation = scope.ServiceProvider.GetService<IOperationalSimulationState>();
 
-                var artificialDelayMs = simulation?.OutboxArtificialDelayMs ?? 0;
+                var artificialDelayMs = simulation is null
+                    ? 0
+                    : await simulation.GetOutboxArtificialDelayMsAsync(stoppingToken).ConfigureAwait(false);
                 if (artificialDelayMs > 0)
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(artificialDelayMs), stoppingToken).ConfigureAwait(false);

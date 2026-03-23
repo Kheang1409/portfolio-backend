@@ -1,6 +1,7 @@
 using KaiAssistant.Application.Diagnostics;
 using KaiAssistant.Application.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
+using KaiAssistant.Infrastructure.Cache;
+using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
 namespace KaiAssistant.Infrastructure.Observability;
@@ -8,12 +9,20 @@ namespace KaiAssistant.Infrastructure.Observability;
 public sealed class ResilienceStatusProvider : IResilienceStatusProvider
 {
     private static readonly string[] Components = ["ai", "rabbitmq", "email"];
-    private readonly IConnectionMultiplexer? _redis;
+    private readonly object _sync = new();
+    private readonly IRedisConnectionFactory _redisFactory;
+    private readonly RedisExecutionHelper _redisExecution;
+    private readonly ILogger<ResilienceStatusProvider> _logger;
     private readonly Dictionary<string, ResilienceComponentStatus> _fallbackState = new(StringComparer.OrdinalIgnoreCase);
 
-    public ResilienceStatusProvider(IServiceProvider serviceProvider)
+    public ResilienceStatusProvider(
+        IRedisConnectionFactory redisFactory,
+        RedisExecutionHelper redisExecution,
+        ILogger<ResilienceStatusProvider> logger)
     {
-        _redis = serviceProvider.GetService<IConnectionMultiplexer>();
+        _redisFactory = redisFactory;
+        _redisExecution = redisExecution;
+        _logger = logger;
         foreach (var component in Components)
         {
             _fallbackState[component] = Create(component);
@@ -22,9 +31,11 @@ public sealed class ResilienceStatusProvider : IResilienceStatusProvider
 
     public ResilienceSnapshot GetSnapshot()
     {
-        if (_redis is null)
+        _ = RefreshFromRedisAsync();
+
+        lock (_sync)
         {
-            var fallback = _fallbackState.Values
+            var list = _fallbackState.Values
                 .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(x => new ResilienceComponentStatus
                 {
@@ -36,74 +47,23 @@ public sealed class ResilienceStatusProvider : IResilienceStatusProvider
                 })
                 .ToList();
 
-            return new ResilienceSnapshot { Components = fallback };
+            return new ResilienceSnapshot { Components = list };
         }
-
-        var db = _redis.GetDatabase();
-        var list = Components
-            .Select(component =>
-            {
-                var key = BuildKey(component);
-                var values = db.HashGetAll(key);
-                var status = Create(component);
-
-                foreach (var value in values)
-                {
-                    if (value.Name == "circuitState")
-                    {
-                        status.CircuitState = value.Value.ToString();
-                        continue;
-                    }
-
-                    if (value.Name == "failureCount" && long.TryParse(value.Value.ToString(), out var failureCount))
-                    {
-                        status.FailureCount = failureCount;
-                        continue;
-                    }
-
-                    if (value.Name == "lastFailureAtUtc" && DateTimeOffset.TryParse(value.Value.ToString(), out var lastFailureAtUtc))
-                    {
-                        status.LastFailureAtUtc = lastFailureAtUtc;
-                        continue;
-                    }
-
-                    if (value.Name == "lastFailureReason")
-                    {
-                        status.LastFailureReason = value.Value.ToString();
-                    }
-                }
-
-                return status;
-            })
-            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        return new ResilienceSnapshot { Components = list };
     }
 
     public void RecordFailure(string component, string reason)
     {
         var safeComponent = Normalize(component);
-        if (_redis is not null)
+        lock (_sync)
         {
-            var db = _redis.GetDatabase();
-            var key = BuildKey(safeComponent);
-            var now = DateTimeOffset.UtcNow;
-            db.HashIncrement(key, "failureCount", 1);
-            db.HashSet(key, [
-                new HashEntry("name", safeComponent),
-                new HashEntry("lastFailureAtUtc", now.ToString("O")),
-                new HashEntry("lastFailureReason", reason ?? string.Empty)
-            ]);
-            db.KeyExpire(key, TimeSpan.FromDays(7));
-            return;
+            var status = _fallbackState.TryGetValue(safeComponent, out var existing) ? existing : Create(safeComponent);
+            status.FailureCount++;
+            status.LastFailureAtUtc = DateTimeOffset.UtcNow;
+            status.LastFailureReason = reason;
+            _fallbackState[safeComponent] = status;
         }
 
-        var status = _fallbackState.TryGetValue(safeComponent, out var existing) ? existing : Create(safeComponent);
-        status.FailureCount++;
-        status.LastFailureAtUtc = DateTimeOffset.UtcNow;
-        status.LastFailureReason = reason;
-        _fallbackState[safeComponent] = status;
+        _ = PersistFailureAsync(safeComponent, reason);
     }
 
     public void RecordSuccess(string component)
@@ -115,21 +75,119 @@ public sealed class ResilienceStatusProvider : IResilienceStatusProvider
     {
         var safeComponent = Normalize(component);
         var safeState = string.IsNullOrWhiteSpace(state) ? "Closed" : state;
-        if (_redis is not null)
+        lock (_sync)
         {
-            var db = _redis.GetDatabase();
-            var key = BuildKey(safeComponent);
-            db.HashSet(key, [
-                new HashEntry("name", safeComponent),
-                new HashEntry("circuitState", safeState)
-            ]);
-            db.KeyExpire(key, TimeSpan.FromDays(7));
+            var status = _fallbackState.TryGetValue(safeComponent, out var existing) ? existing : Create(safeComponent);
+            status.CircuitState = safeState;
+            _fallbackState[safeComponent] = status;
+        }
+
+        _ = PersistCircuitStateAsync(safeComponent, safeState);
+    }
+
+    private async Task RefreshFromRedisAsync()
+    {
+        if (!_redisFactory.IsConfigured)
+        {
             return;
         }
 
-        var status = _fallbackState.TryGetValue(safeComponent, out var existing) ? existing : Create(safeComponent);
-        status.CircuitState = safeState;
-        _fallbackState[safeComponent] = status;
+        var redisState = await _redisExecution.ExecuteSafeAsync(
+            async (db, ct) =>
+            {
+                var updated = new Dictionary<string, ResilienceComponentStatus>(StringComparer.OrdinalIgnoreCase);
+                foreach (var component in Components)
+                {
+                    var key = BuildKey(component);
+                    var values = await db.HashGetAllAsync(key).WaitAsync(ct).ConfigureAwait(false);
+                    var status = Create(component);
+
+                    foreach (var value in values)
+                    {
+                        if (value.Name == "circuitState")
+                        {
+                            status.CircuitState = value.Value.ToString();
+                            continue;
+                        }
+
+                        if (value.Name == "failureCount" && long.TryParse(value.Value.ToString(), out var failureCount))
+                        {
+                            status.FailureCount = failureCount;
+                            continue;
+                        }
+
+                        if (value.Name == "lastFailureAtUtc" && DateTimeOffset.TryParse(value.Value.ToString(), out var lastFailureAtUtc))
+                        {
+                            status.LastFailureAtUtc = lastFailureAtUtc;
+                            continue;
+                        }
+
+                        if (value.Name == "lastFailureReason")
+                        {
+                            status.LastFailureReason = value.Value.ToString();
+                        }
+                    }
+
+                    updated[component] = status;
+                }
+
+                return updated;
+            },
+            () => new Dictionary<string, ResilienceComponentStatus>(StringComparer.OrdinalIgnoreCase),
+            "resilience:refresh",
+            _logger).ConfigureAwait(false);
+
+        if (redisState.Count == 0)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            foreach (var kvp in redisState)
+            {
+                _fallbackState[kvp.Key] = kvp.Value;
+            }
+        }
+    }
+
+    private async Task PersistFailureAsync(string component, string reason)
+    {
+        await _redisExecution.ExecuteSafeAsync(
+            async (db, ct) =>
+            {
+                var key = BuildKey(component);
+                var now = DateTimeOffset.UtcNow;
+                await db.HashIncrementAsync(key, "failureCount", 1).WaitAsync(ct).ConfigureAwait(false);
+                await db.HashSetAsync(key, [
+                    new HashEntry("name", component),
+                    new HashEntry("lastFailureAtUtc", now.ToString("O")),
+                    new HashEntry("lastFailureReason", reason ?? string.Empty)
+                ]).WaitAsync(ct).ConfigureAwait(false);
+                await db.KeyExpireAsync(key, TimeSpan.FromDays(7)).WaitAsync(ct).ConfigureAwait(false);
+                return true;
+            },
+            () => false,
+            "resilience:record_failure",
+            _logger).ConfigureAwait(false);
+    }
+
+    private async Task PersistCircuitStateAsync(string component, string state)
+    {
+        await _redisExecution.ExecuteSafeAsync(
+            async (db, ct) =>
+            {
+                var key = BuildKey(component);
+                await db.HashSetAsync(key, [
+                    new HashEntry("name", component),
+                    new HashEntry("circuitState", state)
+                ]).WaitAsync(ct).ConfigureAwait(false);
+                await db.KeyExpireAsync(key, TimeSpan.FromDays(7)).WaitAsync(ct).ConfigureAwait(false);
+                return true;
+            },
+            () => false,
+            "resilience:record_state",
+            _logger).ConfigureAwait(false);
     }
 
     private static ResilienceComponentStatus Create(string name)

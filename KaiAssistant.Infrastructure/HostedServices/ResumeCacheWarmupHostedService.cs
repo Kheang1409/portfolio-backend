@@ -1,5 +1,5 @@
 using KaiAssistant.Domain.Interfaces.Repositories;
-using Microsoft.Extensions.DependencyInjection;
+using KaiAssistant.Infrastructure.Cache;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -11,13 +11,16 @@ public sealed class ResumeCacheWarmupHostedService : IHostedService
     private const string WarmupLockKey = "startup:warmup:resume:lock";
 
     private readonly IResumeRepository _resumeRepository;
-    private readonly IConnectionMultiplexer? _redis;
+    private readonly IRedisConnectionFactory _redisFactory;
     private readonly ILogger<ResumeCacheWarmupHostedService> _logger;
 
-    public ResumeCacheWarmupHostedService(IResumeRepository resumeRepository, IServiceProvider serviceProvider, ILogger<ResumeCacheWarmupHostedService> logger)
+    public ResumeCacheWarmupHostedService(
+        IResumeRepository resumeRepository,
+        IRedisConnectionFactory redisFactory,
+        ILogger<ResumeCacheWarmupHostedService> logger)
     {
         _resumeRepository = resumeRepository;
-        _redis = serviceProvider.GetService<IConnectionMultiplexer>();
+        _redisFactory = redisFactory;
         _logger = logger;
     }
 
@@ -25,11 +28,14 @@ public sealed class ResumeCacheWarmupHostedService : IHostedService
     {
         try
         {
-            if (_redis is not null)
+            var redis = await _redisFactory.GetConnectionAsync(cancellationToken).ConfigureAwait(false);
+            if (redis is not null)
             {
-                var db = _redis.GetDatabase();
+                var db = redis.GetDatabase();
                 var token = $"{Environment.MachineName}:{Guid.NewGuid():N}";
-                var acquired = await db.StringSetAsync(WarmupLockKey, token, TimeSpan.FromMinutes(2), when: When.NotExists).ConfigureAwait(false);
+                var acquired = await db.StringSetAsync(WarmupLockKey, token, TimeSpan.FromMinutes(2), when: When.NotExists)
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 if (!acquired)
                 {
                     _logger.LogInformation("Resume cache warmup skipped; lock is owned by another instance.");

@@ -3,10 +3,11 @@ using System.Threading;
 using System.Text.Json;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Infrastructure.FeatureFlags;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
@@ -35,7 +36,8 @@ public sealed class RedisCacheService : ICacheService, ICacheDiagnosticsService
     private static long _totalLockWaitMs;
     private static long _lockWaitCount;
 
-    private readonly IConnectionMultiplexer? _redis;
+    private readonly IRedisConnectionFactory _redisFactory;
+    private readonly RedisExecutionHelper _redisExecution;
     private readonly IMemoryCache _memoryCache;
     private readonly DistributedCacheOptions _options;
     private readonly IFeatureFlagService _featureFlags;
@@ -45,13 +47,15 @@ public sealed class RedisCacheService : ICacheService, ICacheDiagnosticsService
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     public RedisCacheService(
-        IServiceProvider serviceProvider,
+        IRedisConnectionFactory redisFactory,
+        RedisExecutionHelper redisExecution,
         IMemoryCache memoryCache,
         IOptions<DistributedCacheOptions> options,
         IFeatureFlagService featureFlags,
         ILogger<RedisCacheService> logger)
     {
-        _redis = serviceProvider.GetService<IConnectionMultiplexer>();
+        _redisFactory = redisFactory;
+        _redisExecution = redisExecution;
         _memoryCache = memoryCache;
         _options = options.Value;
         _featureFlags = featureFlags;
@@ -85,7 +89,7 @@ public sealed class RedisCacheService : ICacheService, ICacheDiagnosticsService
         }
     }
 
-    public bool IsRedisConnected => _redis?.IsConnected == true;
+    public bool IsRedisConnected => _redisFactory.IsConnected;
 
     public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
     {
@@ -96,22 +100,26 @@ public sealed class RedisCacheService : ICacheService, ICacheDiagnosticsService
 
         var finalKey = BuildKey(key);
 
-        if (_redis is not null)
-        {
-            var db = _redis.GetDatabase();
-            var value = await db.StringGetAsync(finalKey).ConfigureAwait(false);
-            if (value.HasValue)
-            {
-                CacheHits.Add(1, KeyValuePair.Create<string, object?>("layer", "redis"));
-                Interlocked.Increment(ref _hitCount);
-                _logger.LogDebug("Cache hit (redis): {Key}", finalKey);
-                return JsonSerializer.Deserialize<T>((string)value!, SerializerOptions);
-            }
+        var redisResult = await _redisExecution.ExecuteSafeAsync(
+            async (db, ct) => await db.StringGetAsync(finalKey).WaitAsync(ct).ConfigureAwait(false),
+            () => RedisValue.Null,
+            "cache:get",
+            _logger,
+            cancellationToken).ConfigureAwait(false);
 
+        if (redisResult.HasValue)
+        {
+            CacheHits.Add(1, KeyValuePair.Create<string, object?>("layer", "redis"));
+            Interlocked.Increment(ref _hitCount);
+            _logger.LogDebug("Cache hit (redis): {Key}", finalKey);
+            return JsonSerializer.Deserialize<T>((string)redisResult!, SerializerOptions);
+        }
+
+        if (_redisFactory.IsConfigured)
+        {
             CacheMisses.Add(1, KeyValuePair.Create<string, object?>("layer", "redis"));
             Interlocked.Increment(ref _missCount);
             _logger.LogDebug("Cache miss (redis): {Key}", finalKey);
-            return default;
         }
 
         if (_memoryCache.TryGetValue(finalKey, out T? memoryValue))
@@ -141,12 +149,20 @@ public sealed class RedisCacheService : ICacheService, ICacheDiagnosticsService
             : ttl;
         effectiveTtl = ApplyTtlJitter(effectiveTtl);
 
-        if (_redis is not null)
+        if (_redisFactory.IsConfigured)
         {
-            var db = _redis.GetDatabase();
             var payload = JsonSerializer.Serialize(value, SerializerOptions);
-            await db.StringSetAsync(finalKey, payload, effectiveTtl).ConfigureAwait(false);
-            return;
+            var wroteRedis = await _redisExecution.ExecuteSafeAsync(
+                async (db, ct) => await db.StringSetAsync(finalKey, payload, effectiveTtl).WaitAsync(ct).ConfigureAwait(false),
+                () => false,
+                "cache:set",
+                _logger,
+                cancellationToken).ConfigureAwait(false);
+
+            if (wroteRedis)
+            {
+                return;
+            }
         }
 
         _memoryCache.Set(finalKey, value, effectiveTtl);
@@ -161,11 +177,19 @@ public sealed class RedisCacheService : ICacheService, ICacheDiagnosticsService
 
         var finalKey = BuildKey(key);
 
-        if (_redis is not null)
+        if (_redisFactory.IsConfigured)
         {
-            var db = _redis.GetDatabase();
-            await db.KeyDeleteAsync(finalKey).ConfigureAwait(false);
-            return;
+            var removedRedis = await _redisExecution.ExecuteSafeAsync(
+                async (db, ct) => await db.KeyDeleteAsync(finalKey).WaitAsync(ct).ConfigureAwait(false),
+                () => false,
+                "cache:remove",
+                _logger,
+                cancellationToken).ConfigureAwait(false);
+
+            if (removedRedis)
+            {
+                return;
+            }
         }
 
         _memoryCache.Remove(finalKey);
@@ -185,9 +209,16 @@ public sealed class RedisCacheService : ICacheService, ICacheDiagnosticsService
 
         var finalKey = BuildKey(key);
 
-        if (_redis is not null)
+        if (_redisFactory.IsConfigured)
         {
-            var db = _redis.GetDatabase();
+            var connection = await _redisFactory.GetConnectionAsync(cancellationToken).ConfigureAwait(false);
+            if (connection is null)
+            {
+                RedisMetrics.RecordFallback("cache:get_or_create");
+                return await FallbackGetOrCreateAsync(finalKey, key, factory, ttl, cancellationToken).ConfigureAwait(false);
+            }
+
+            var db = connection.GetDatabase();
             var lockKey = $"{finalKey}:rebuild:lock";
             var lockToken = $"{Environment.MachineName}:{Guid.NewGuid():N}";
             var lockExpiry = TimeSpan.FromMilliseconds(Math.Max(250, _options.RebuildLockTimeoutMs));
@@ -255,8 +286,19 @@ return 0";
             }
         }
 
+        return await FallbackGetOrCreateAsync(finalKey, key, factory, ttl, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<T> FallbackGetOrCreateAsync<T>(
+        string finalKey,
+        string key,
+        Func<CancellationToken, Task<T>> factory,
+        TimeSpan ttl,
+        CancellationToken cancellationToken)
+    {
         var gate = _fallbackKeyLocks.GetOrAdd(finalKey, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var cached = default(T);
 
         try
         {
@@ -292,20 +334,29 @@ return 0";
     {
         var prefix = string.IsNullOrWhiteSpace(_options.KeyPrefix) ? "cache" : _options.KeyPrefix;
         var ns = string.IsNullOrWhiteSpace(_options.Namespace) ? "default" : _options.Namespace;
-        return $"{prefix}:{ns}:{key}";
+        var input = $"{prefix}:{ns}:{key}";
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+        return $"cache:{ns}:{hash}";
     }
 
     public async Task<long?> GetKeyCountAsync(CancellationToken cancellationToken = default)
     {
-        if (_redis is null || !_redis.IsConnected)
+        if (!_redisFactory.IsConnected)
         {
             return null;
         }
 
         try
         {
-            var db = _redis.GetDatabase();
-            var result = await db.ExecuteAsync("DBSIZE").ConfigureAwait(false);
+            var redis = await _redisFactory.GetConnectionAsync(cancellationToken).ConfigureAwait(false);
+            if (redis is null)
+            {
+                return null;
+            }
+
+            var db = redis.GetDatabase();
+            var result = await db.ExecuteAsync("DBSIZE").WaitAsync(cancellationToken).ConfigureAwait(false);
             if (result.IsNull)
             {
                 return null;

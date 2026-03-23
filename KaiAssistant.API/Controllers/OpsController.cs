@@ -7,11 +7,11 @@ using KaiAssistant.Application.Diagnostics;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
 using KaiAssistant.Infrastructure.EventBus;
+using KaiAssistant.Infrastructure.Cache;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using StackExchange.Redis;
 
 namespace KaiAssistant.API.Controllers;
 
@@ -32,7 +32,7 @@ public sealed class OpsController : ControllerBase
     private readonly ICacheDiagnosticsService _cacheDiagnostics;
     private readonly IFeatureFlagService _flags;
     private readonly IMongoDatabase _mongoDatabase;
-    private readonly IConnectionMultiplexer? _redis;
+    private readonly IRedisConnectionFactory _redisFactory;
     private readonly IOptionsMonitor<RabbitMqOptions> _rabbitOptions;
     private readonly OutboxRecoveryOptions _outboxRecoveryOptions;
     private readonly OpsSecurityOptions _opsSecurityOptions;
@@ -55,7 +55,7 @@ public sealed class OpsController : ControllerBase
         ICacheDiagnosticsService cacheDiagnostics,
         IFeatureFlagService flags,
         IMongoDatabase mongoDatabase,
-        IServiceProvider serviceProvider,
+        IRedisConnectionFactory redisFactory,
         IOptionsMonitor<RabbitMqOptions> rabbitOptions,
         IOptions<OutboxRecoveryOptions> outboxRecoveryOptions,
         IOptions<OpsSecurityOptions> opsSecurityOptions,
@@ -77,7 +77,7 @@ public sealed class OpsController : ControllerBase
         _cacheDiagnostics = cacheDiagnostics;
         _flags = flags;
         _mongoDatabase = mongoDatabase;
-        _redis = serviceProvider.GetService<IConnectionMultiplexer>();
+        _redisFactory = redisFactory;
         _rabbitOptions = rabbitOptions;
         _outboxRecoveryOptions = outboxRecoveryOptions.Value;
         _opsSecurityOptions = opsSecurityOptions.Value;
@@ -212,14 +212,14 @@ public sealed class OpsController : ControllerBase
     }
 
     [HttpGet("rate-limit")]
-    public IActionResult RateLimit([FromQuery] int minutes = 10, [FromQuery] int top = 5)
+    public async Task<IActionResult> RateLimit([FromQuery] int minutes = 10, [FromQuery] int top = 5, CancellationToken cancellationToken = default)
     {
         if (!IsOpsAllowed())
         {
             return NotFound();
         }
 
-        var snapshot = _rateLimitTelemetry.Snapshot(minutes, top);
+        var snapshot = await _rateLimitTelemetry.SnapshotAsync(minutes, top, cancellationToken).ConfigureAwait(false);
         return Ok(new
         {
             instanceId = _instanceIdentity.InstanceId,
@@ -387,7 +387,7 @@ public sealed class OpsController : ControllerBase
     }
 
     [HttpGet("simulate")]
-    public IActionResult SimulationState()
+    public async Task<IActionResult> SimulationState(CancellationToken cancellationToken)
     {
         if (!IsOpsAllowed())
         {
@@ -399,16 +399,19 @@ public sealed class OpsController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Load test hooks are disabled." });
         }
 
+        var aiThrottleUntilUtc = await _simulationState.GetForceAiThrottleUntilUtcAsync(cancellationToken).ConfigureAwait(false);
+        var outboxArtificialDelayMs = await _simulationState.GetOutboxArtificialDelayMsAsync(cancellationToken).ConfigureAwait(false);
+
         return Ok(new
         {
             instanceId = _instanceIdentity.InstanceId,
-            aiThrottleUntilUtc = _simulationState.ForceAiThrottleUntilUtc,
-            outboxArtificialDelayMs = _simulationState.OutboxArtificialDelayMs
+            aiThrottleUntilUtc,
+            outboxArtificialDelayMs
         });
     }
 
     [HttpPost("simulate/ai-throttle")]
-    public IActionResult SimulateAiThrottle([FromQuery] int seconds = 30)
+    public async Task<IActionResult> SimulateAiThrottle([FromQuery] int seconds = 30, CancellationToken cancellationToken = default)
     {
         if (!IsOpsAllowed())
         {
@@ -421,19 +424,20 @@ public sealed class OpsController : ControllerBase
         }
 
         var boundedSeconds = Math.Clamp(seconds, 1, 600);
-        _simulationState.ForceAiThrottleFor(TimeSpan.FromSeconds(boundedSeconds));
+        await _simulationState.ForceAiThrottleForAsync(TimeSpan.FromSeconds(boundedSeconds), cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("AuditSimulateAiThrottle: seconds={Seconds}", boundedSeconds);
+        var untilUtc = await _simulationState.GetForceAiThrottleUntilUtcAsync(cancellationToken).ConfigureAwait(false);
 
         return Ok(new
         {
             applied = true,
             seconds = boundedSeconds,
-            untilUtc = _simulationState.ForceAiThrottleUntilUtc
+            untilUtc
         });
     }
 
     [HttpPost("simulate/outbox-delay")]
-    public IActionResult SimulateOutboxDelay([FromQuery] int milliseconds = 0)
+    public async Task<IActionResult> SimulateOutboxDelay([FromQuery] int milliseconds = 0, CancellationToken cancellationToken = default)
     {
         if (!IsOpsAllowed())
         {
@@ -446,13 +450,14 @@ public sealed class OpsController : ControllerBase
         }
 
         var bounded = Math.Clamp(milliseconds, 0, 15_000);
-        _simulationState.SetOutboxArtificialDelay(bounded);
+        await _simulationState.SetOutboxArtificialDelayAsync(bounded, cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("AuditSimulateOutboxDelay: milliseconds={Milliseconds}", bounded);
+        var outboxArtificialDelayMs = await _simulationState.GetOutboxArtificialDelayMsAsync(cancellationToken).ConfigureAwait(false);
 
         return Ok(new
         {
             applied = true,
-            outboxArtificialDelayMs = _simulationState.OutboxArtificialDelayMs
+            outboxArtificialDelayMs
         });
     }
 
@@ -632,16 +637,17 @@ public sealed class OpsController : ControllerBase
 
     private async Task<bool> CheckRedisAsync(CancellationToken cancellationToken)
     {
-        if (_redis is null)
+        var redis = await _redisFactory.GetConnectionAsync(cancellationToken).ConfigureAwait(false);
+        if (redis is null)
         {
             return false;
         }
 
         try
         {
-            var db = _redis.GetDatabase();
-            await db.PingAsync().ConfigureAwait(false);
-            return _redis.IsConnected;
+            var db = redis.GetDatabase();
+            await db.PingAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            return redis.IsConnected;
         }
         catch
         {

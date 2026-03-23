@@ -1,9 +1,9 @@
 using KaiAssistant.API.Options;
 using KaiAssistant.API.Services;
 using KaiAssistant.Application.Interfaces;
+using KaiAssistant.Infrastructure.Cache;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
@@ -40,7 +40,8 @@ return {1, 0}
 ";
 
     private readonly RequestDelegate _next;
-    private readonly IConnectionMultiplexer? _redis;
+    private readonly IRedisConnectionFactory _redisFactory;
+    private readonly RedisExecutionHelper _redisExecution;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<RedisRateLimitingMiddleware> _logger;
     private readonly RateLimitingOptions _options;
@@ -49,7 +50,8 @@ return {1, 0}
 
     public RedisRateLimitingMiddleware(
         RequestDelegate next,
-        IServiceProvider serviceProvider,
+        IRedisConnectionFactory redisFactory,
+        RedisExecutionHelper redisExecution,
         IMemoryCache memoryCache,
         IOptions<RateLimitingOptions> options,
         IFeatureFlagService flags,
@@ -57,7 +59,8 @@ return {1, 0}
         ILogger<RedisRateLimitingMiddleware> logger)
     {
         _next = next;
-        _redis = serviceProvider.GetService<IConnectionMultiplexer>();
+        _redisFactory = redisFactory;
+        _redisExecution = redisExecution;
         _memoryCache = memoryCache;
         _logger = logger;
         _options = options.Value;
@@ -82,7 +85,7 @@ return {1, 0}
         var (allowed, retryAfterSeconds, clientIp) = await IsAllowedAsync(context).ConfigureAwait(false);
         if (!allowed)
         {
-            _telemetry.RecordBlocked(clientIp, context.Request.Path.Value ?? "unknown");
+            await _telemetry.RecordBlockedAsync(clientIp, context.Request.Path.Value ?? "unknown", context.RequestAborted).ConfigureAwait(false);
             BlockedRequests.Add(1,
                 KeyValuePair.Create<string, object?>("path", context.Request.Path.Value ?? "unknown"),
                 KeyValuePair.Create<string, object?>("window_seconds", _options.WindowSeconds));
@@ -95,7 +98,7 @@ return {1, 0}
             return;
         }
 
-        _telemetry.RecordAllowed(clientIp, context.Request.Path.Value ?? "unknown");
+        await _telemetry.RecordAllowedAsync(clientIp, context.Request.Path.Value ?? "unknown", context.RequestAborted).ConfigureAwait(false);
         AllowedRequests.Add(1,
             KeyValuePair.Create<string, object?>("path", context.Request.Path.Value ?? "unknown"),
             KeyValuePair.Create<string, object?>("window_seconds", _options.WindowSeconds));
@@ -129,18 +132,30 @@ return {1, 0}
             : context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var window = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / windowSeconds;
         var key = _options.UseSlidingWindow
-            ? $"ratelimit:sliding:{clientIp}"
+            ? $"ratelimit:{clientIp}:sliding"
             : $"ratelimit:{clientIp}:{window}";
 
-        if (_redis is not null)
+        if (_redisFactory.IsConfigured)
         {
-            var db = _redis.GetDatabase();
+            var redis = await _redisFactory.GetConnectionAsync(context.RequestAborted).ConfigureAwait(false);
+            if (redis is null)
+            {
+                if (_options.StrictDistributedMode)
+                {
+                    _logger.LogWarning("Rate limit request denied because strict distributed mode is enabled and Redis is unavailable.");
+                    return (false, windowSeconds, clientIp);
+                }
+
+                return await EvaluateMemoryFallbackAsync(key, windowSeconds, permitLimit, clientIp).ConfigureAwait(false);
+            }
+
+            var db = redis.GetDatabase();
 
             var globalPermit = _options.GlobalPermitLimit.GetValueOrDefault(0);
             if (globalPermit > 0)
             {
                 var globalKey = _options.UseSlidingWindow
-                    ? "ratelimit:sliding:global"
+                    ? "ratelimit:global:sliding"
                     : $"ratelimit:global:{window}";
 
                 if (_options.UseSlidingWindow)
@@ -148,14 +163,25 @@ return {1, 0}
                     var windowMsGlobal = windowSeconds * 1000L;
                     var nowMsGlobal = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     var memberGlobal = $"{nowMsGlobal}:{Guid.NewGuid():N}";
-                    var globalResult = await db
-                        .ScriptEvaluateAsync(
-                            SlidingWindowScript,
-                            [new RedisKey(globalKey)],
-                            [nowMsGlobal, windowMsGlobal, globalPermit, memberGlobal])
-                        .ConfigureAwait(false);
+                    var globalResult = await _redisExecution.ExecuteSafeAsync(
+                        async (database, ct) => (RedisResult[]?)(await database
+                            .ScriptEvaluateAsync(
+                                SlidingWindowScript,
+                                [new RedisKey(globalKey)],
+                                [nowMsGlobal, windowMsGlobal, globalPermit, memberGlobal])
+                            .WaitAsync(ct)
+                            .ConfigureAwait(false)) ?? Array.Empty<RedisResult>(),
+                        () => Array.Empty<RedisResult>(),
+                        "ratelimit:global_sliding",
+                        _logger,
+                        context.RequestAborted).ConfigureAwait(false);
 
-                    var globalTuple = (RedisResult[]?)globalResult;
+                    var globalTuple = globalResult;
+                    if (globalTuple is null || globalTuple.Length < 2)
+                    {
+                        return await EvaluateMemoryFallbackAsync(key, windowSeconds, permitLimit, clientIp).ConfigureAwait(false);
+                    }
+
                     if (globalTuple is not null && globalTuple.Length >= 2 && (long)globalTuple[0] == 0)
                     {
                         return (false, (int)(long)globalTuple[1], clientIp);
@@ -163,10 +189,20 @@ return {1, 0}
                 }
                 else
                 {
-                    var globalCount = await db.StringIncrementAsync(globalKey).ConfigureAwait(false);
+                    var globalCount = await _redisExecution.ExecuteSafeAsync(
+                        async (database, ct) => await database.StringIncrementAsync(globalKey).WaitAsync(ct).ConfigureAwait(false),
+                        () => -1L,
+                        "ratelimit:global_increment",
+                        _logger,
+                        context.RequestAborted).ConfigureAwait(false);
+                    if (globalCount < 0)
+                    {
+                        return await EvaluateMemoryFallbackAsync(key, windowSeconds, permitLimit, clientIp).ConfigureAwait(false);
+                    }
+
                     if (globalCount == 1)
                     {
-                        await db.KeyExpireAsync(globalKey, TimeSpan.FromSeconds(windowSeconds)).ConfigureAwait(false);
+                        await db.KeyExpireAsync(globalKey, TimeSpan.FromSeconds(windowSeconds)).WaitAsync(context.RequestAborted).ConfigureAwait(false);
                     }
 
                     if (globalCount > globalPermit)
@@ -181,28 +217,45 @@ return {1, 0}
                 var windowMs = windowSeconds * 1000L;
                 var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 var member = $"{nowMs}:{Guid.NewGuid():N}";
-                var result = await db
-                    .ScriptEvaluateAsync(
-                        SlidingWindowScript,
-                        [new RedisKey(key)],
-                        [nowMs, windowMs, permitLimit, member])
-                    .ConfigureAwait(false);
+                var result = await _redisExecution.ExecuteSafeAsync(
+                    async (database, ct) => (RedisResult[]?)(await database
+                        .ScriptEvaluateAsync(
+                            SlidingWindowScript,
+                            [new RedisKey(key)],
+                            [nowMs, windowMs, permitLimit, member])
+                        .WaitAsync(ct)
+                        .ConfigureAwait(false)) ?? Array.Empty<RedisResult>(),
+                    () => Array.Empty<RedisResult>(),
+                    "ratelimit:sliding",
+                    _logger,
+                    context.RequestAborted).ConfigureAwait(false);
 
-                var tuple = (RedisResult[]?)result;
-                if (tuple is not null && tuple.Length >= 2)
+                var tuple = result;
+                if (tuple is null || tuple.Length < 2)
                 {
-                    var allowed = (long)tuple[0] == 1;
-                    var retryAfter = (int)(long)tuple[1];
-                    return (allowed, Math.Max(0, retryAfter), clientIp);
+                    return await EvaluateMemoryFallbackAsync(key, windowSeconds, permitLimit, clientIp).ConfigureAwait(false);
                 }
 
-                return (true, 0, clientIp);
+                var allowed = (long)tuple[0] == 1;
+                var retryAfter = (int)(long)tuple[1];
+                return (allowed, Math.Max(0, retryAfter), clientIp);
             }
 
-            var count = await db.StringIncrementAsync(key).ConfigureAwait(false);
+            var count = await _redisExecution.ExecuteSafeAsync(
+                async (database, ct) => await database.StringIncrementAsync(key).WaitAsync(ct).ConfigureAwait(false),
+                () => -1L,
+                "ratelimit:increment",
+                _logger,
+                context.RequestAborted).ConfigureAwait(false);
+
+            if (count < 0)
+            {
+                return await EvaluateMemoryFallbackAsync(key, windowSeconds, permitLimit, clientIp).ConfigureAwait(false);
+            }
+
             if (count == 1)
             {
-                await db.KeyExpireAsync(key, TimeSpan.FromSeconds(windowSeconds)).ConfigureAwait(false);
+                await db.KeyExpireAsync(key, TimeSpan.FromSeconds(windowSeconds)).WaitAsync(context.RequestAborted).ConfigureAwait(false);
             }
 
             if (count > permitLimit)
@@ -219,6 +272,16 @@ return {1, 0}
             return (false, windowSeconds, clientIp);
         }
 
+        return await EvaluateMemoryFallbackAsync(key, windowSeconds, permitLimit, clientIp).ConfigureAwait(false);
+    }
+
+    private Task<(bool Allowed, int RetryAfterSeconds, string ClientIp)> EvaluateMemoryFallbackAsync(
+        string key,
+        int windowSeconds,
+        int permitLimit,
+        string clientIp)
+    {
+        RedisMetrics.RecordFallback("ratelimit:fallback");
         // Compatibility fallback for environments where Redis is not configured.
         var fallbackCount = _memoryCache.GetOrCreate(key, entry =>
         {
@@ -232,9 +295,9 @@ return {1, 0}
         if (fallbackCount > permitLimit)
         {
             _logger.LogWarning("Request throttled for {ClientIp} using in-memory fallback limiter.", clientIp);
-            return (false, windowSeconds, clientIp);
+            return Task.FromResult((false, windowSeconds, clientIp));
         }
 
-        return (true, 0, clientIp);
+        return Task.FromResult((true, 0, clientIp));
     }
 }

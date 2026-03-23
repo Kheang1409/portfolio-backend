@@ -1,14 +1,14 @@
 using System.Collections.Concurrent;
-using Microsoft.Extensions.DependencyInjection;
+using KaiAssistant.Infrastructure.Cache;
 using StackExchange.Redis;
 
 namespace KaiAssistant.API.Services;
 
 public interface IRateLimitTelemetry
 {
-    void RecordAllowed(string ip, string path);
-    void RecordBlocked(string ip, string path);
-    RateLimitTelemetrySnapshot Snapshot(int minutes, int top);
+    Task RecordAllowedAsync(string ip, string path, CancellationToken cancellationToken = default);
+    Task RecordBlockedAsync(string ip, string path, CancellationToken cancellationToken = default);
+    Task<RateLimitTelemetrySnapshot> SnapshotAsync(int minutes, int top, CancellationToken cancellationToken = default);
 }
 
 public sealed class RateLimitTelemetrySnapshot
@@ -26,84 +26,85 @@ public sealed class RateLimitIpCount
 
 public sealed class RateLimitTelemetry : IRateLimitTelemetry
 {
-    private const string TotalBlockedKey = "ratelimit:telemetry:total:blocked";
-    private const string TotalAllowedKey = "ratelimit:telemetry:total:allowed";
+    private const string TotalBlockedKey = "telemetry:ratelimit:total:blocked";
+    private const string TotalAllowedKey = "telemetry:ratelimit:total:allowed";
 
-    private readonly IConnectionMultiplexer? _redis;
+    private readonly IRedisConnectionFactory _redisFactory;
+    private readonly RedisExecutionHelper _redisExecution;
     private readonly ILogger<RateLimitTelemetry> _logger;
     private readonly ConcurrentDictionary<string, long> _fallbackBlockedWindowCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, long> _fallbackAllowedWindowCounts = new(StringComparer.OrdinalIgnoreCase);
     private long _totalBlocked;
     private long _totalAllowed;
 
-    public RateLimitTelemetry(IServiceProvider serviceProvider, ILogger<RateLimitTelemetry> logger)
+    public RateLimitTelemetry(IRedisConnectionFactory redisFactory, RedisExecutionHelper redisExecution, ILogger<RateLimitTelemetry> logger)
     {
-        _redis = serviceProvider.GetService<IConnectionMultiplexer>();
+        _redisFactory = redisFactory;
+        _redisExecution = redisExecution;
         _logger = logger;
     }
 
-    public void RecordAllowed(string ip, string path)
+    public async Task RecordAllowedAsync(string ip, string path, CancellationToken cancellationToken = default)
     {
         var minuteWindow = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmm");
-
-        if (_redis is not null)
-        {
-            var db = _redis.GetDatabase();
-            db.StringIncrement(TotalAllowedKey);
-            var windowKey = $"ratelimit:telemetry:allowed:{minuteWindow}";
-            db.StringIncrement(windowKey);
-            db.KeyExpire(windowKey, TimeSpan.FromMinutes(90));
-            return;
-        }
-
-        Interlocked.Increment(ref _totalAllowed);
-        var key = $"allowed:{minuteWindow}";
-        _fallbackAllowedWindowCounts.AddOrUpdate(key, 1, (_, old) => old + 1);
+        await _redisExecution.ExecuteSafeAsync(
+            async (db, ct) =>
+            {
+                await db.StringIncrementAsync(TotalAllowedKey).WaitAsync(ct).ConfigureAwait(false);
+                var windowKey = $"telemetry:ratelimit:allowed:{minuteWindow}";
+                await db.StringIncrementAsync(windowKey).WaitAsync(ct).ConfigureAwait(false);
+                await db.KeyExpireAsync(windowKey, TimeSpan.FromMinutes(90)).WaitAsync(ct).ConfigureAwait(false);
+                return true;
+            },
+            () =>
+            {
+                Interlocked.Increment(ref _totalAllowed);
+                var key = $"allowed:{minuteWindow}";
+                _fallbackAllowedWindowCounts.AddOrUpdate(key, 1, (_, old) => old + 1);
+                return false;
+            },
+            "ratelimit:telemetry:allowed",
+            _logger,
+            cancellationToken).ConfigureAwait(false);
     }
 
-    public void RecordBlocked(string ip, string path)
+    public async Task RecordBlockedAsync(string ip, string path, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _totalBlocked);
 
         var minuteWindow = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmm");
 
-        if (_redis is not null)
-        {
-            var db = _redis.GetDatabase();
-            db.StringIncrement(TotalBlockedKey);
-            var hashKey = $"ratelimit:telemetry:blocked:{minuteWindow}";
-            var safeIp = string.IsNullOrWhiteSpace(ip) ? "unknown" : ip;
-            var current = db.HashIncrement(hashKey, safeIp, 1);
-            db.KeyExpire(hashKey, TimeSpan.FromMinutes(90));
-
-            if (current % 10 == 0)
+        var current = await _redisExecution.ExecuteSafeAsync(
+            async (db, ct) =>
             {
-                _logger.LogWarning(
-                    "RateLimitAggregate: path={Path} ip={Ip} blockedCount={BlockedCount} window={Window}",
-                    path,
-                    ip,
-                    current,
-                    minuteWindow);
-            }
+                await db.StringIncrementAsync(TotalBlockedKey).WaitAsync(ct).ConfigureAwait(false);
+                var hashKey = $"telemetry:ratelimit:blocked:{minuteWindow}";
+                var safeIp = string.IsNullOrWhiteSpace(ip) ? "unknown" : ip;
+                var blockedCount = await db.HashIncrementAsync(hashKey, safeIp, 1).WaitAsync(ct).ConfigureAwait(false);
+                await db.KeyExpireAsync(hashKey, TimeSpan.FromMinutes(90)).WaitAsync(ct).ConfigureAwait(false);
+                return blockedCount;
+            },
+            () =>
+            {
+                var key = $"blocked:{minuteWindow}:{ip}";
+                return _fallbackBlockedWindowCounts.AddOrUpdate(key, 1, (_, old) => old + 1);
+            },
+            "ratelimit:telemetry:blocked",
+            _logger,
+            cancellationToken).ConfigureAwait(false);
 
-            return;
-        }
-
-        var key = $"blocked:{minuteWindow}:{ip}";
-        var currentMem = _fallbackBlockedWindowCounts.AddOrUpdate(key, 1, (_, old) => old + 1);
-
-        if (currentMem % 10 == 0)
+        if (current % 10 == 0)
         {
             _logger.LogWarning(
                 "RateLimitAggregate: path={Path} ip={Ip} blockedCount={BlockedCount} window={Window}",
                 path,
                 ip,
-                currentMem,
+                current,
                 minuteWindow);
         }
     }
 
-    public RateLimitTelemetrySnapshot Snapshot(int minutes, int top)
+    public async Task<RateLimitTelemetrySnapshot> SnapshotAsync(int minutes, int top, CancellationToken cancellationToken = default)
     {
         var boundedMinutes = Math.Clamp(minutes, 1, 60);
         var boundedTop = Math.Clamp(top, 1, 20);
@@ -112,27 +113,45 @@ public sealed class RateLimitTelemetry : IRateLimitTelemetry
         long blockedTotal;
         long allowedTotal;
 
-        if (_redis is not null)
-        {
-            var db = _redis.GetDatabase();
-            blockedTotal = (long?)db.StringGet(TotalBlockedKey) ?? 0;
-            allowedTotal = (long?)db.StringGet(TotalAllowedKey) ?? 0;
-
-            for (var i = 0; i < boundedMinutes; i++)
+        var redisSnapshot = await _redisExecution.ExecuteSafeAsync(
+            async (db, ct) =>
             {
-                var window = DateTimeOffset.UtcNow.AddMinutes(-i).ToString("yyyyMMddHHmm");
-                var hashKey = $"ratelimit:telemetry:blocked:{window}";
-                foreach (var entry in db.HashGetAll(hashKey))
-                {
-                    var ip = entry.Name.ToString();
-                    if (string.IsNullOrWhiteSpace(ip))
-                    {
-                        continue;
-                    }
+                var blocked = (long?)(await db.StringGetAsync(TotalBlockedKey).WaitAsync(ct).ConfigureAwait(false)) ?? 0;
+                var allowed = (long?)(await db.StringGetAsync(TotalAllowedKey).WaitAsync(ct).ConfigureAwait(false)) ?? 0;
+                var aggregate = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
-                    var value = (long)entry.Value;
-                    grouped[ip] = grouped.TryGetValue(ip, out var count) ? count + value : value;
+                for (var i = 0; i < boundedMinutes; i++)
+                {
+                    var window = DateTimeOffset.UtcNow.AddMinutes(-i).ToString("yyyyMMddHHmm");
+                    var hashKey = $"telemetry:ratelimit:blocked:{window}";
+                    var entries = await db.HashGetAllAsync(hashKey).WaitAsync(ct).ConfigureAwait(false);
+                    foreach (var entry in entries)
+                    {
+                        var ip = entry.Name.ToString();
+                        if (string.IsNullOrWhiteSpace(ip))
+                        {
+                            continue;
+                        }
+
+                        var value = (long)entry.Value;
+                        aggregate[ip] = aggregate.TryGetValue(ip, out var count) ? count + value : value;
+                    }
                 }
+
+                return (blocked, allowed, aggregate, usedRedis: true);
+            },
+            () => (0L, 0L, new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase), usedRedis: false),
+            "ratelimit:telemetry:snapshot",
+            _logger,
+            cancellationToken).ConfigureAwait(false);
+
+        if (redisSnapshot.usedRedis)
+        {
+            blockedTotal = redisSnapshot.Item1;
+            allowedTotal = redisSnapshot.Item2;
+            foreach (var kvp in redisSnapshot.Item3)
+            {
+                grouped[kvp.Key] = kvp.Value;
             }
         }
         else

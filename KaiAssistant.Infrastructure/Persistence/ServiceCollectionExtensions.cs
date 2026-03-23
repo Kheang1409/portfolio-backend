@@ -35,6 +35,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IFeatureFlagService, ConfigurationFeatureFlagService>();
         services.AddSingleton<IInstanceIdentity, InstanceIdentity>();
+        services.AddSingleton<IRedisConnectionFactory, RedisConnectionFactory>();
+        services.AddSingleton<RedisExecutionHelper>();
         services.AddSingleton<IResilienceStatusProvider, ResilienceStatusProvider>();
         services.TryAddSingleton<IClientContextAccessor, DefaultClientContextAccessor>();
         services.AddSingleton<RedisCacheService>();
@@ -56,6 +58,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUnitOfWork, MongoUnitOfWork>();
 
         services.AddHostedService<OutboxProcessorHostedService>();
+        services.AddHostedService<RedisWarmupHostedService>();
         services.AddHostedService<MongoIndexInitializerHostedService>();
         services.AddHostedService<ResumeCacheWarmupHostedService>();
         services.AddHostedService<ModelHealthBootstrapHostedService>();

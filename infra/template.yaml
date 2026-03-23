@@ -132,6 +132,7 @@ Resources:
         Variables:
           MONGODB_CONNECTIONSTRING: !Ref MongoConnectionString
           MONGODB_DATABASE: !Ref MongoDatabaseName
+          REDIS_URL: !Ref RedisConnectionString
           REDIS__CONNECTIONSTRING: !Ref RedisConnectionString
           DOTNET_ENVIRONMENT: !Ref DotNetEnvironment
           ALLOWED_ORIGINS: !Ref AllowedOrigins
