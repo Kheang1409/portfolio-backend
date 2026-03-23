@@ -233,8 +233,14 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
         return;
     }
 
-    var mongoConn = configuration["MongoDB:ConnectionString"];
-    var mongoDb = configuration["MongoDB:DatabaseName"];
+    var mongoConn = configuration["MongoDB:ConnectionString"]
+        ?? configuration["MONGODB_CONNECTIONSTRING"]
+        ?? Environment.GetEnvironmentVariable("MONGODB_CONNECTIONSTRING")
+        ?? configuration["MongoDB__ConnectionString"];
+    var mongoDb = configuration["MongoDB:DatabaseName"]
+        ?? configuration["MONGODB_DATABASE"]
+        ?? Environment.GetEnvironmentVariable("MONGODB_DATABASE")
+        ?? configuration["MongoDB__DatabaseName"];
     if (string.IsNullOrWhiteSpace(mongoConn) || string.IsNullOrWhiteSpace(mongoDb))
     {
         throw new InvalidOperationException("MongoDB configuration is required in production.");
@@ -244,7 +250,11 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
 
     if (flags.EnableCache)
     {
-        var redisConn = configuration["REDIS_URL"] ?? configuration["Redis:ConnectionString"];
+        var redisConn = configuration["REDIS_URL"]
+            ?? configuration["Redis:ConnectionString"]
+            ?? configuration["REDIS__CONNECTIONSTRING"]
+            ?? Environment.GetEnvironmentVariable("REDIS_URL")
+            ?? Environment.GetEnvironmentVariable("REDIS__CONNECTIONSTRING");
         if (string.IsNullOrWhiteSpace(redisConn))
         {
             throw new InvalidOperationException("Redis configuration is required when cache feature is enabled in production.");
