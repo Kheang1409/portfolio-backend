@@ -11,6 +11,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace KaiAssistant.Infrastructure.Gateways;
 public class GeminiGateway : IGeminiGateway
@@ -368,6 +369,27 @@ public class GeminiGateway : IGeminiGateway
                 _logger.LogWarning("Streaming request failed for model {Model}; trying next candidate. {Error}", model, capture.Error);
                 _resilience.RecordFailure("ai", capture.Error);
                 _modelHealth.RecordFailure(model, DateTimeOffset.UtcNow, capture.Error);
+
+                if (TryParse429Error(capture.Error, out var isQuotaExhausted, out var retryAfter))
+                {
+                    _model429Counts.AddOrUpdate(model, 1, (_, old) => old + 1);
+
+                    if (isQuotaExhausted)
+                    {
+                        _modelHealth.MarkRateLimited(model, DateTimeOffset.UtcNow, retryAtUtc: null, reason: "quota_exhausted_stream");
+                        _logger.LogWarning("Quota exhausted for model {Model} in streaming path; switching to next model.", model);
+                    }
+                    else
+                    {
+                        var skipThreshold = TimeSpan.FromSeconds(_settings.Value.SkipRetryDelayThresholdSeconds);
+                        var retryAt = retryAfter.HasValue ? DateTimeOffset.UtcNow.Add(retryAfter.Value) : (DateTimeOffset?)null;
+                        var reason = retryAfter.HasValue && retryAfter.Value > skipThreshold
+                            ? "retry_delay_too_large_stream"
+                            : "http_429_stream";
+                        _modelHealth.MarkRateLimited(model, DateTimeOffset.UtcNow, retryAt, reason);
+                    }
+                }
+
                 continue;
             }
 
@@ -684,5 +706,71 @@ public class GeminiGateway : IGeminiGateway
         }
 
         return (int)Math.Ceiling(value.Length / 4d);
+    }
+
+    private static bool TryParse429Error(string error, out bool isQuotaExhausted, out TimeSpan? retryAfter)
+    {
+        isQuotaExhausted = false;
+        retryAfter = null;
+
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return false;
+        }
+
+        var is429 = error.Contains(" 429 ", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("RESOURCE_EXHAUSTED", StringComparison.OrdinalIgnoreCase);
+        if (!is429)
+        {
+            return false;
+        }
+
+        isQuotaExhausted = error.Contains("quota exceeded", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("GenerateRequestsPerDay", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("free_tier", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("limit: 0", StringComparison.OrdinalIgnoreCase);
+
+        try
+        {
+            var jsonStart = error.IndexOf('{');
+            if (jsonStart >= 0)
+            {
+                var json = error[jsonStart..];
+                using var doc = JsonDocument.Parse(json);
+
+                if (doc.RootElement.TryGetProperty("error", out var errorNode)
+                    && errorNode.TryGetProperty("details", out var details)
+                    && details.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var detail in details.EnumerateArray())
+                    {
+                        if (detail.TryGetProperty("@type", out var typeNode)
+                            && typeNode.GetString()?.Contains("RetryInfo", StringComparison.OrdinalIgnoreCase) == true
+                            && detail.TryGetProperty("retryDelay", out var retryDelayNode)
+                            && retryDelayNode.ValueKind == JsonValueKind.String)
+                        {
+                            if (TimeSpan.TryParse(retryDelayNode.GetString(), out var parsed))
+                            {
+                                retryAfter = parsed;
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        var regex = new Regex(@"retry\s+in\s+(\d+(?:\.\d+)?)s", RegexOptions.IgnoreCase);
+        var match = regex.Match(error);
+        if (match.Success && double.TryParse(match.Groups[1].Value, out var seconds))
+        {
+            retryAfter = TimeSpan.FromSeconds(seconds);
+        }
+
+        return true;
     }
 }
