@@ -38,6 +38,12 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Build solution
+        run: dotnet build KaiAssistant.sln --configuration Release --no-restore
+
+      - name: Validate SAM template
+        run: sam validate --template infra/template.yaml
+
       - name: SAM Build
         run: sam build --template infra/template.yaml
 
@@ -74,6 +80,8 @@ jobs:
               SmtpSenderEmail="${{ secrets.SMTP_SENDER_EMAIL }}" \
               SmtpReceiverEmail="${{ secrets.SMTP_RECEIVER_EMAIL }}" \
               SmtpSenderPassword="$SMTP_SENDER_PASSWORD_CLEAN" \
+              SmtpEnabled="true" \
+              DotNetEnvironment="Production" \
               GeminiApiKey="${{ secrets.GEMINI_API_KEY }}"
 
       - name: Get CloudFormation events on failure

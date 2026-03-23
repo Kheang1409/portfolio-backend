@@ -72,7 +72,7 @@ Parameters:
 
   GeminiModelNames:
     Type: String
-    Default: gemini-2.5-flash:generateContent,gemini-2.5-flash-lite:generateContent
+    Default: gemini-3.1-flash-lite-preview:generateContent,gemini-3-flash-preview:generateContent,gemini-2.5-flash:generateContent,gemini-2.5-flash-lite:generateContent
     Description: Comma/semicolon separated Gemini model names
 
   GeminiEndpoint:
@@ -120,6 +120,31 @@ Parameters:
     Default: "1"
     Description: Gemini candidate count
 
+  GeminiTopChunks:
+    Type: String
+    Default: "8"
+    Description: Max resume chunks used for context selection
+
+  GeminiLastSuccessfulModelCacheTtlSeconds:
+    Type: String
+    Default: "120"
+    Description: Preferred-model cache TTL in seconds
+
+  GeminiSkipRetryDelayThresholdSeconds:
+    Type: String
+    Default: "3"
+    Description: Skip retries when RetryInfo delay exceeds this threshold
+
+  GeminiDeprioritizeOn429Count:
+    Type: String
+    Default: "1"
+    Description: 429 count threshold before model deprioritization/skip
+
+  GeminiDeprioritizeSkip:
+    Type: String
+    Default: "true"
+    Description: Skip model after threshold (true/false)
+
 Resources:
   KaiAssistantFunction:
     Type: AWS::Serverless::Function
@@ -153,6 +178,11 @@ Resources:
           GEMINI_TOPP: !Ref GeminiTopP
           GEMINI_MAX_OUTPUT_TOKENS: !Ref GeminiMaxOutputTokens
           GEMINI_CANDIDATE_COUNT: !Ref GeminiCandidateCount
+          GEMINI_TOP_CHUNKS: !Ref GeminiTopChunks
+          GEMINISETTINGS__LASTSUCCESSFULMODELCACHETTLSECONDS: !Ref GeminiLastSuccessfulModelCacheTtlSeconds
+          GEMINISETTINGS__SKIPRETRYDELAYTHRESHOLDSECONDS: !Ref GeminiSkipRetryDelayThresholdSeconds
+          GEMINISETTINGS__DEPRIORITIZEON429COUNT: !Ref GeminiDeprioritizeOn429Count
+          GEMINISETTINGS__DEPRIORITIZESKIP: !Ref GeminiDeprioritizeSkip
       Events:
         ApiEvent:
           Type: HttpApi

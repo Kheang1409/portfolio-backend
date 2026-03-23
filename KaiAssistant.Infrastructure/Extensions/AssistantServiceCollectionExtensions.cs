@@ -15,79 +15,72 @@ public static class AssistantServiceCollectionExtensions
     public static IServiceCollection AddGeminiAiServices(this IServiceCollection services, IConfiguration configuration)
     {
         var geminiSettings = configuration.GetSection("GeminiSettings");
+        var configuredSettings = geminiSettings.Get<GeminiSettings>() ?? new GeminiSettings();
 
         string apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY")
-                  ?? geminiSettings["ApiKey"]
+                  ?? configuredSettings.ApiKey
                   ?? throw new ArgumentException("Gemini setting 'ApiKey' is missing or empty.");
 
-        List<string> modelNames = new();
+        List<string> modelNames;
         var envModelNames = Environment.GetEnvironmentVariable("GEMINI_MODEL_NAMES");
         if (!string.IsNullOrWhiteSpace(envModelNames))
         {
             modelNames = envModelNames.Split(';', ',').Select(m => m.Trim()).Where(m => !string.IsNullOrWhiteSpace(m)).ToList();
         }
-        else if (geminiSettings.Exists())
+        else
         {
-            var configModels = geminiSettings.GetSection("ModelNames").Get<string[]>();
-            if (configModels != null && configModels.Length > 0)
-                modelNames = configModels.ToList();
+            modelNames = configuredSettings.ModelNames ?? new List<string>();
         }
+
         if (modelNames.Count == 0)
             throw new ArgumentException("Gemini setting 'ModelNames' is missing or empty.");
 
         string endpoint = Environment.GetEnvironmentVariable("GEMINI_ENDPOINT")
-                          ?? geminiSettings["Endpoint"]
+                          ?? configuredSettings.Endpoint
                           ?? throw new ArgumentException("Gemini setting 'Endpoint' is missing or empty.");
 
         string systemPrompt = Environment.GetEnvironmentVariable("GEMINI_SYSTEM_PROMPT")
-                           ?? geminiSettings["SystemPrompt"]
+                           ?? configuredSettings.SystemPrompt
                            ?? string.Empty;
 
-        int promptMaxChars = 10000;
-        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GEMINI_PROMPT_MAX_CHARS")))
+        int promptMaxChars = configuredSettings.PromptMaxChars > 0 ? configuredSettings.PromptMaxChars : 10000;
+        var envPromptMaxChars = Environment.GetEnvironmentVariable("GEMINI_PROMPT_MAX_CHARS");
+        if (!string.IsNullOrWhiteSpace(envPromptMaxChars))
         {
-            if (int.TryParse(Environment.GetEnvironmentVariable("GEMINI_PROMPT_MAX_CHARS"), out var parsed) && parsed > 0)
-                promptMaxChars = parsed;
-        }
-        else if (!string.IsNullOrWhiteSpace(geminiSettings["PromptMaxChars"]))
-        {
-            if (int.TryParse(geminiSettings["PromptMaxChars"], out var parsed) && parsed > 0)
+            if (int.TryParse(envPromptMaxChars, out var parsed) && parsed > 0)
                 promptMaxChars = parsed;
         }
 
-        bool includePersonalDetails = true;
+        bool includePersonalDetails = configuredSettings.IncludePersonalDetails;
         var envIncludePersonal = Environment.GetEnvironmentVariable("GEMINI_INCLUDE_PERSONAL_DETAILS");
         if (!string.IsNullOrWhiteSpace(envIncludePersonal) && bool.TryParse(envIncludePersonal, out var parsedInclude))
         {
             includePersonalDetails = parsedInclude;
         }
-        else if (!string.IsNullOrWhiteSpace(geminiSettings["IncludePersonalDetails"]) && bool.TryParse(geminiSettings["IncludePersonalDetails"], out var parsedConfigInclude))
-        {
-            includePersonalDetails = parsedConfigInclude;
-        }
 
-        double? temperature = null;
-        if (!string.IsNullOrWhiteSpace(geminiSettings["Temperature"]) && double.TryParse(geminiSettings["Temperature"], out var tempConfig))
-            temperature = tempConfig;
+        var temperature = configuredSettings.Temperature;
+        var topK = configuredSettings.TopK;
+        var topP = configuredSettings.TopP;
+        var maxOutputTokens = configuredSettings.MaxOutputTokens;
+        var candidateCount = configuredSettings.CandidateCount;
 
-        int? topK = null;
-        if (!string.IsNullOrWhiteSpace(geminiSettings["TopK"]) && int.TryParse(geminiSettings["TopK"], out var topKConfig))
-            topK = topKConfig;
-
-        double? topP = null;
-        if (!string.IsNullOrWhiteSpace(geminiSettings["TopP"]) && double.TryParse(geminiSettings["TopP"], out var topPConfig))
-            topP = topPConfig;
-
-        int? maxOutputTokens = null;
-        if (!string.IsNullOrWhiteSpace(geminiSettings["MaxOutputTokens"]) && int.TryParse(geminiSettings["MaxOutputTokens"], out var maxTokensConfig))
-            maxOutputTokens = maxTokensConfig;
-
-        int? candidateCount = null;
-        if (!string.IsNullOrWhiteSpace(geminiSettings["CandidateCount"]) && int.TryParse(geminiSettings["CandidateCount"], out var candidateConfig))
-            candidateCount = candidateConfig;
+        if (double.TryParse(Environment.GetEnvironmentVariable("GEMINI_TEMPERATURE"), out var envTemperature))
+            temperature = envTemperature;
+        if (int.TryParse(Environment.GetEnvironmentVariable("GEMINI_TOPK"), out var envTopK))
+            topK = envTopK;
+        if (double.TryParse(Environment.GetEnvironmentVariable("GEMINI_TOPP"), out var envTopP))
+            topP = envTopP;
+        if (int.TryParse(Environment.GetEnvironmentVariable("GEMINI_MAX_OUTPUT_TOKENS"), out var envMaxOutputTokens))
+            maxOutputTokens = envMaxOutputTokens;
+        if (int.TryParse(Environment.GetEnvironmentVariable("GEMINI_CANDIDATE_COUNT"), out var envCandidateCount))
+            candidateCount = envCandidateCount;
 
         services.Configure<GeminiSettings>(opts =>
         {
+            opts.LastSuccessfulModelCacheTtlSeconds = configuredSettings.LastSuccessfulModelCacheTtlSeconds;
+            opts.SkipRetryDelayThresholdSeconds = configuredSettings.SkipRetryDelayThresholdSeconds;
+            opts.DeprioritizeOn429Count = configuredSettings.DeprioritizeOn429Count;
+            opts.DeprioritizeSkip = configuredSettings.DeprioritizeSkip;
             opts.ApiKey = apiKey;
             opts.ModelNames = modelNames;
             opts.Endpoint = endpoint;
