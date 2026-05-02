@@ -1,169 +1,170 @@
 # KaiAssistant API
 
-Production-ready ASP.NET Core Web API for the portfolio experience, including AI assistant responses, contact delivery, resume APIs, and operational diagnostics.
+KaiAssistant API is the .NET 10 backend for the portfolio app.
 
-## Stack
+It focuses on the routes and services that the frontend actually uses:
 
-- .NET 10 / ASP.NET Core
-- MongoDB (primary data store)
-- Google Gemini API (assistant generation)
-- Optional Redis (cache/rate-limit support)
-- Optional RabbitMQ (outbox publishing scenarios)
-- OpenTelemetry + Serilog
-- AWS Lambda + API Gateway via SAM
+- assistant streaming through `POST /api/assistant`
+- contact form processing through `POST /api/contacts`
+- visitor analytics ingestion through `POST /api/visits`
+- resume retrieval and creation through `POST` and `GET /api/resumes/*`
+- health checks through `/api/health`, `/health/ready`, and `/health/live`
+- internal diagnostics and simulation routes under `/ops/*`
 
-## What Is Implemented
+## Architecture
 
-### Public API Endpoints
+- Domain layer for core entities.
+- Application layer for use cases, DTOs, and orchestration contracts.
+- Infrastructure layer for persistence, AI providers, cache, event bus, and external services.
+- API layer for controllers, middleware, and startup wiring.
 
-- `POST /api/assistants/ask`
-  - Returns plain text response body.
-  - Adds response headers:
-    - `X-AI-Model-Used`
-    - `X-AI-Latency-Ms`
-    - `X-AI-Fallback-Used`
-- `POST /api/assistants/stream`
-  - NDJSON streaming endpoint.
-  - Falls back to buffered mode client-side when streaming is disabled.
-- `POST /api/assistants/ask/batch`
-  - Feature-flag controlled batch ask endpoint.
-- `POST /api/contacts`
-  - Sends portfolio contact email via SMTP settings.
-- `GET|HEAD /api/health`
-  - Basic controller health check.
-- `GET /api/resumes/latest`
-- `GET /api/resumes/{id}`
-- `POST /api/resumes`
+## Runtime Notes
 
-### Health Probes
+- The assistant controller returns a streaming NDJSON response from a single `POST /api/assistant` endpoint.
+- The backend uses Serilog, OpenTelemetry, CORS, response compression, output caching, authentication, and custom middleware.
+- Health checks are split between the controller health route and app-level ready/live probes.
+- The compose file does not provision MongoDB, so a reachable MongoDB instance is still required for data-backed features.
 
-- `GET /health/live`
-- `GET /health/ready`
-  - Includes readiness checks for MongoDB, Redis, RabbitMQ, and AI provider health checks.
+## Quick Start
 
-### Ops Endpoints (hidden from Swagger)
+### Prerequisites
 
-Base route: `/ops`
+- .NET SDK 10.
+- Docker Desktop.
+- MongoDB, if you want the backend features that read or write persisted data.
+- Redis, if you want cache-backed flows outside the minimal local setup.
 
-- `GET /ops/health/detailed`
-- `GET /ops/outbox`
-- `GET /ops/cache`
-- `GET /ops/debug/config`
-- `GET /ops/resilience`
-- `GET /ops/rate-limit`
-- `GET /ops/ai-models`
-- Load-test hooks:
-  - `GET /ops/simulate`
-  - `POST /ops/simulate/ai-throttle`
-  - `POST /ops/simulate/outbox-delay`
-- Recovery hooks:
-  - `POST /ops/outbox/replay/{id}`
-  - `POST /ops/outbox/replay-failed`
-  - `POST /ops/outbox/dead-letter/{id}`
+### Environment
 
-Ops endpoint access behavior:
-
-- Available in Development by default.
-- In Production, requires `Ops:EnabledInProduction=true`.
-- Optional header auth can be enabled with `OpsSecurity` options:
-  - Default header: `X-Ops-Key`
-
-## Configuration
-
-The application supports `appsettings*.json` plus environment variables. The following variables are used directly in code and should be considered the primary deployment contract.
-
-### Required for Typical Runtime
-
-- `MONGODB_CONNECTIONSTRING`
-- `MONGODB_DATABASE`
-- `ALLOWED_ORIGINS`
-- `GEMINI_API_KEY`
-- `SMTP_SERVER`
-- `SMTP_PORT`
-- `SMTP_SENDER_EMAIL`
-- `SMTP_RECEIVER_EMAIL`
-- `SMTP_SENDER_PASSWORD`
-
-### Common Optional Variables
-
-- `SMTP_ENABLED` (default behavior depends on environment)
-- `GEMINI_MODEL_NAMES`
-- `GEMINI_ENDPOINT`
-- `GEMINI_SYSTEM_PROMPT`
-- `GEMINI_PROMPT_MAX_CHARS`
-- `GEMINI_INCLUDE_PERSONAL_DETAILS`
-- `GEMINI_TEMPERATURE`
-- `GEMINI_TOPK`
-- `GEMINI_TOPP`
-- `GEMINI_MAX_OUTPUT_TOKENS`
-- `GEMINI_CANDIDATE_COUNT`
-- `REDIS__CONNECTIONSTRING`
-  - Supports `rediss://` and uses resilient connection settings.
-
-## Local Development
-
-From repository root:
+Copy the root template and fill in the required values:
 
 ```bash
+cp ../.env.example ../.env
+```
+
+Key variables:
+
+- `GEMINI_API_KEY` - required for assistant features.
+- `MONGODB_CONNECTIONSTRING` - MongoDB connection string.
+- `MONGODB_DATABASE` - MongoDB database name.
+- `REDIS__CONNECTIONSTRING` - Redis connection string.
+- `SMTP_*` - optional contact email configuration.
+- `ALLOWED_ORIGINS` - CORS origins.
+
+### Run With Docker Compose
+
+```bash
+cd ..
 docker-compose up -d --build
 ```
 
-Default local ports:
+This starts the backend, Redis, and frontend containers. The backend is exposed on `http://localhost:5000` and container port `8080`.
 
-- Backend: `http://localhost:5000`
-- Frontend: `http://localhost:3000`
-- Redis: `localhost:6379`
-
-### Run Backend Only (without Docker)
-
-From `backend`:
+### Run Locally
 
 ```bash
-dotnet restore
-dotnet build
+cd backend
+dotnet restore KaiAssistant.sln
+dotnet build KaiAssistant.sln
 dotnet run --project KaiAssistant.API
 ```
 
-Swagger is enabled only in Development.
-
-## Testing
-
-From `backend`:
+### Run Tests
 
 ```bash
-dotnet test
+cd backend
+dotnet test KaiAssistant.Tests/KaiAssistant.Tests.csproj
 ```
 
-## Deployment (AWS Lambda via SAM)
+## API Examples
 
-Template: `infra/template.yaml`
-Workflow: `.github/workflows/deploy-lambda.yml`
+### Assistant Stream
 
-### SAM Parameters in Use
+```bash
+curl -X POST http://localhost:5000/api/assistant \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Explain the architecture in 3 bullets."}'
+```
 
-- `MongoConnectionString`
-- `RedisConnectionString`
-- `MongoDatabaseName`
-- `AllowedOrigins`
-- `SmtpSenderEmail`
-- `SmtpReceiverEmail`
-- `SmtpSenderPassword`
-- `GeminiApiKey`
+The response is NDJSON, so each line is an individual stream chunk.
 
-### Required GitHub Secrets for Deploy Workflow
+### Assistant Stream With Conversation Memory
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `MONGODB_CONNECTIONSTRING`
-- `REDIS__CONNECTIONSTRING`
-- `MONGODB_DATABASE`
-- `ALLOWED_ORIGINS`
-- `SMTP_SENDER_EMAIL`
-- `SMTP_RECEIVER_EMAIL`
-- `SMTP_SENDER_PASSWORD`
-- `GEMINI_API_KEY`
+```bash
+curl -X POST http://localhost:5000/api/assistant \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message":"My name is Alice",
+    "context":{
+      "metadata":{
+        "sessionId":"browser-session-123"
+      }
+    }
+  }'
+```
 
-## Notes
+Then ask a follow-up with the same `sessionId`:
 
-- API is wired for Lambda hosting (`AddAWSLambdaHosting`) and also runs as a regular ASP.NET Core app locally.
-- Feature flags in configuration control optional capabilities such as batching, cache, outbox processing, and streaming behavior.
+```bash
+curl -X POST http://localhost:5000/api/assistant \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message":"What is my name?",
+    "context":{
+      "metadata":{
+        "sessionId":"browser-session-123"
+      }
+    }
+  }'
+```
+
+The backend resolves or creates a conversation from `sessionId` when `conversationId` is not explicitly sent.
+
+### Contact Form
+
+```bash
+curl -X POST http://localhost:5000/api/contacts \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Kai","email":"kai@example.com","message":"Hello"}'
+```
+
+### Visitor Tracking
+
+```bash
+curl -X POST http://localhost:5000/api/visits \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"demo","path":"/","userAgent":"curl"}'
+```
+
+### Resume Lookup
+
+```bash
+curl http://localhost:5000/api/resumes/latest
+```
+
+### Health Checks
+
+```bash
+curl http://localhost:5000/api/health
+curl http://localhost:5000/health/ready
+curl http://localhost:5000/health/live
+```
+
+## Documentation Index
+
+- `docs/architecture.md`
+- `docs/ai-pipeline.md`
+- `docs/scalability.md`
+- `docs/resilience.md`
+- `docs/tradeoffs.md`
+- `docs/api-examples.md`
+- `docs/diagrams/system-diagram.md`
+- `docs/diagrams/ai-flow-diagram.md`
+
+## Troubleshooting
+
+- If assistant requests fail, confirm `GEMINI_API_KEY` is present and the backend can reach the configured Gemini endpoint.
+- If data-backed endpoints fail, confirm MongoDB is reachable and the connection string/database name are correct.
+- If cache-related flows fail, confirm Redis is reachable and `REDIS__CONNECTIONSTRING` points to the right instance.
+- If `/ops/*` routes return 404 in production, confirm ops are enabled in configuration.
+- If the assistant does not remember prior chat in local testing, verify requests include `context.metadata.sessionId` and that MongoDB is reachable.
