@@ -1,7 +1,5 @@
 using KaiAssistant.Domain.Entities;
-
 namespace KaiAssistant.Application.Interfaces;
-
 public interface IAiPromptBuilder
 {
     string BuildSystemPrompt();
@@ -10,4 +8,4 @@ public interface IAiPromptBuilder
     string NormalizeInput(string input);
     string NormalizeContextBlock(AssistantContext? context);
     string ComputePromptHash(string question, ConversationMessage[]? history, string resumeContext, AssistantContext? context);
-}
+}

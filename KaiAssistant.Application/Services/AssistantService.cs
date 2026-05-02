@@ -12,9 +12,7 @@ using KaiAssistant.Application.Options;
 using KaiAssistant.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-
 namespace KaiAssistant.Application.Services;
-
 public class AssistantService : IAssistantService
 {
     private static readonly Meter Meter = new("KaiAssistant.AssistantService", "1.0.0");
@@ -24,14 +22,12 @@ public class AssistantService : IAssistantService
     private static readonly Histogram<double> AssistantStreamTtft = Meter.CreateHistogram<double>("assistant_stream_ttft_ms", "ms");
     private static readonly Histogram<double> AssistantStreamDuration = Meter.CreateHistogram<double>("assistant_stream_duration_ms", "ms");
     private static readonly Histogram<double> AssistantStreamThroughput = Meter.CreateHistogram<double>("assistant_stream_throughput_tps", "tokens_per_second");
-
     private static readonly Meter AiModelsMeter = new("KaiAssistant.AiModels", "1.0.0");
     private static readonly Counter<long> AiModelRequests = AiModelsMeter.CreateCounter<long>("ai_model_requests_total");
     private static readonly Counter<long> AiModelFailures = AiModelsMeter.CreateCounter<long>("ai_model_failures_total");
     private static readonly Counter<long> AiFallbackCount = AiModelsMeter.CreateCounter<long>("ai_fallback_count");
     private static readonly Counter<double> AiCostEstimateTotal = AiModelsMeter.CreateCounter<double>("ai_cost_estimate_total");
     private static readonly Histogram<double> AiModelLatencyMs = AiModelsMeter.CreateHistogram<double>("ai_model_latency_ms", "ms");
-
     private readonly IResumeContextProvider _resumeProvider;
     private readonly IAiPromptBuilder _promptBuilder;
     private readonly IAiModelGateway _gateway;
@@ -43,7 +39,6 @@ public class AssistantService : IAssistantService
     private readonly IFeatureFlagService? _featureFlags;
     private readonly IModelHealthService? _modelHealth;
     private readonly ILogger<AssistantService> _logger;
-
     public AssistantService(
         IResumeContextProvider resumeProvider,
         IAiPromptBuilder promptBuilder,
@@ -69,7 +64,14 @@ public class AssistantService : IAssistantService
         _modelHealth = modelHealth;
         _logger = logger;
     }
-
+    public IAsyncEnumerable<AiStreamChunk> StreamAsync(
+        string question,
+        ConversationMessage[]? history = null,
+        AssistantContext? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        return StreamQuestionAsync(question, history, context, cancellationToken);
+    }
     public async IAsyncEnumerable<AiStreamChunk> StreamQuestionAsync(
         string question,
         ConversationMessage[]? history = null,
@@ -79,7 +81,6 @@ public class AssistantService : IAssistantService
         var sw = Stopwatch.StartNew();
         var messageId = Guid.NewGuid().ToString("N");
         var streaming = _streamingOptions?.CurrentValue ?? new AiStreamingOptions();
-
         if (string.IsNullOrWhiteSpace(question))
         {
             yield return new AiStreamChunk
@@ -92,7 +93,6 @@ public class AssistantService : IAssistantService
             };
             yield break;
         }
-
         if ((_featureFlags is not null && !_featureFlags.EnableStreaming) || !streaming.Enabled)
         {
             var buffered = await AskQuestionAsync(question, history, context, cancellationToken).ConfigureAwait(false);
@@ -105,7 +105,6 @@ public class AssistantService : IAssistantService
                 FallbackUsed = buffered.FallbackUsed,
                 EstimatedCostUsd = buffered.EstimatedCostUsd
             };
-
             yield return new AiStreamChunk
             {
                 Type = "completed",
@@ -120,9 +119,7 @@ public class AssistantService : IAssistantService
             };
             yield break;
         }
-
         AssistantStreamRequests.Add(1, KeyValuePair.Create<string, object?>("endpoint", "assistant.stream"));
-
         var (payloadJson, routing) = await BuildPromptPayloadAsync(question, history, context, cancellationToken).ConfigureAwait(false);
         if (routing.CandidateModels.Count == 0)
         {
@@ -136,18 +133,15 @@ public class AssistantService : IAssistantService
             };
             yield break;
         }
-
         var ttftMs = (double?)null;
         var emittedTokens = 0;
         var anyDelta = false;
         var lastModel = routing.SelectedPrimaryModel;
         var fallbackUsed = false;
-
         _logger.LogInformation(
             "AI stream started: messageId={MessageId} selectedModel={SelectedModel}",
             messageId,
             routing.SelectedPrimaryModel);
-
         try
         {
             await foreach (var gatewayChunk in _gateway.StreamGenerationRequestAsync(
@@ -158,30 +152,25 @@ public class AssistantService : IAssistantService
                                cancellationToken).ConfigureAwait(false))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-
                 if (gatewayChunk.IsCompleted)
                 {
                     lastModel = gatewayChunk.UsedModel ?? lastModel;
                     fallbackUsed = gatewayChunk.FallbackUsed;
                     continue;
                 }
-
                 var delta = gatewayChunk.DeltaText;
                 if (string.IsNullOrWhiteSpace(delta))
                 {
                     continue;
                 }
-
                 anyDelta = true;
                 lastModel = gatewayChunk.UsedModel ?? lastModel;
                 fallbackUsed = gatewayChunk.FallbackUsed;
-
                 if (!ttftMs.HasValue)
                 {
                     ttftMs = sw.Elapsed.TotalMilliseconds;
                     AssistantStreamTtft.Record(ttftMs.Value, KeyValuePair.Create<string, object?>("model", lastModel ?? "unknown"));
                 }
-
                 emittedTokens += EstimateTokens(delta);
                 _logger.LogDebug(
                     "AI stream delta: messageId={MessageId} model={Model} chars={Chars} emittedTokens={EmittedTokens}",
@@ -189,7 +178,6 @@ public class AssistantService : IAssistantService
                     lastModel,
                     delta.Length,
                     emittedTokens);
-
                 yield return new AiStreamChunk
                 {
                     Type = "delta",
@@ -200,7 +188,6 @@ public class AssistantService : IAssistantService
                     EstimatedCostUsd = routing.EstimatedCostUsd
                 };
             }
-
             sw.Stop();
             if (!anyDelta)
             {
@@ -214,20 +201,16 @@ public class AssistantService : IAssistantService
                 };
                 yield break;
             }
-
             var throughput = sw.Elapsed.TotalSeconds > 0
                 ? emittedTokens / sw.Elapsed.TotalSeconds
                 : 0d;
-
             if (!string.IsNullOrWhiteSpace(lastModel) && routing.EstimatedCostUsd > 0m)
             {
                 _modelHealth?.RecordUsage(lastModel, DateTimeOffset.UtcNow, routing.EstimatedInputTokens, emittedTokens, routing.EstimatedCostUsd);
                 AiCostEstimateTotal.Add((double)routing.EstimatedCostUsd, KeyValuePair.Create<string, object?>("model", lastModel));
             }
-
             AssistantStreamDuration.Record(sw.Elapsed.TotalMilliseconds, KeyValuePair.Create<string, object?>("model", lastModel ?? "unknown"));
             AssistantStreamThroughput.Record(throughput, KeyValuePair.Create<string, object?>("model", lastModel ?? "unknown"));
-
             _logger.LogInformation(
                 "AI stream completed: messageId={MessageId} model={Model} fallback={FallbackUsed} durationMs={DurationMs} ttftMs={TtftMs} throughputTps={ThroughputTps}",
                 messageId,
@@ -236,7 +219,6 @@ public class AssistantService : IAssistantService
                 sw.Elapsed.TotalMilliseconds,
                 ttftMs,
                 throughput);
-
             yield return new AiStreamChunk
             {
                 Type = "completed",
@@ -261,7 +243,6 @@ public class AssistantService : IAssistantService
             }
         }
     }
-
     public async Task<AiResponse> AskQuestionAsync(
         string question,
         ConversationMessage[]? history = null,
@@ -270,7 +251,6 @@ public class AssistantService : IAssistantService
     {
         var sw = Stopwatch.StartNew();
         var governance = _governanceOptions?.CurrentValue ?? new AiGovernanceOptions();
-
         // Validate input
         if (string.IsNullOrWhiteSpace(question))
         {
@@ -281,7 +261,6 @@ public class AssistantService : IAssistantService
                 KeyValuePair.Create<string, object?>("endpoint", "assistant.ask"));
             return new AiResponse { Text = "Please provide a question." };
         }
-
         var normalizedQuestion = _promptBuilder.NormalizeInput(question);
         var normalizedHistory = history?
             .Select(x => new ConversationMessage
@@ -290,20 +269,11 @@ public class AssistantService : IAssistantService
                 Content = _promptBuilder.NormalizeInput(x.Content)
             })
             .ToArray();
-
-        var snapshot = await _resumeProvider.GetResumeChunksAsync(cancellationToken).ConfigureAwait(false);
-        var resumeMissing = snapshot.Length == 0;
-        if (resumeMissing)
-        {
-            _logger.LogInformation("No resume loaded; answering without resume context.");
-        }
-
         bool includePersonalDetails = _options.Value.IncludePersonalDetails;
         var relevantChunks = await _resumeProvider.GetRelevantChunksAsync(question, cancellationToken).ConfigureAwait(false);
         var filteredChunks = includePersonalDetails
             ? relevantChunks
             : relevantChunks.Where(c => !c.Label.Contains("Personal", StringComparison.OrdinalIgnoreCase)).ToArray();
-
         if (!includePersonalDetails && filteredChunks.Length < relevantChunks.Length)
         {
             _logger.LogInformation("Personal resume fields filtered per settings");
@@ -312,26 +282,20 @@ public class AssistantService : IAssistantService
         {
             _logger.LogInformation("Resume chunks loaded");
         }
-
         var combinedResume = string.Join("\n\n", filteredChunks.Select(c => $"{c.Label}: {c.Content}"));
-
         var contextBlock = _promptBuilder.NormalizeContextBlock(context);
-
         int maxChars = _options.Value.PromptMaxChars;
         if (combinedResume.Length > maxChars)
         {
             combinedResume = combinedResume.Substring(0, maxChars) + "\n\n...[truncated resume context]";
         }
-
         var maxPromptChars = Math.Max(1000, maxChars * 2);
         if (normalizedQuestion.Length > maxPromptChars)
         {
             normalizedQuestion = normalizedQuestion[..maxPromptChars];
         }
-
         var promptHash = _promptBuilder.ComputePromptHash(normalizedQuestion, normalizedHistory, combinedResume, context);
         var cacheKey = $"ai-response:{governance.CacheKeyVersion}:{promptHash}";
-
         if (CanUseResponseCache(governance))
         {
             var cached = await _cache!.GetAsync<string>(cacheKey, cancellationToken).ConfigureAwait(false);
@@ -344,26 +308,22 @@ public class AssistantService : IAssistantService
                 };
             }
         }
-
         var systemPrompt = _promptBuilder.BuildSystemPrompt();
-        if (resumeMissing)
+        // If no resume context is available, include a brief note so downstream prompts can handle it
+        if (string.IsNullOrWhiteSpace(combinedResume))
         {
-            systemPrompt += "\n\nNote: I don't have access to the user's resume. Answer based on general knowledge and be explicit when information is missing. Offer concise suggestions for follow-up questions to get more details.";
+            systemPrompt += "\n\nNote: I don't have access to the user's resume";
         }
-
         var genConfig = _promptBuilder.BuildGenerationConfig(normalizedQuestion);
         var genConfigNode = JsonSerializer.SerializeToNode(genConfig) as JsonObject ?? new JsonObject();
-
         // Gemini payload: contents array with role/parts structure
         var contentsArray = new JsonArray();
-
         // Add system prompt as a model message (system-equivalent)
         contentsArray.Add(new JsonObject
         {
             ["role"] = "model",
             ["parts"] = new JsonArray(new JsonObject { ["text"] = systemPrompt })
         });
-
         // Add conversation history if provided (limit to last 10 messages to avoid token limits)
         int historyChars = 0;
         if (normalizedHistory != null && normalizedHistory.Length > 0)
@@ -373,7 +333,6 @@ public class AssistantService : IAssistantService
             {
                 if (string.IsNullOrWhiteSpace(msg.Content)) continue;
                 historyChars += msg.Content.Length;
-
                 // Normalize roles: Gemini accepts only 'user' and 'model'.
                 string normalizedRole;
                 if (string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase))
@@ -390,7 +349,6 @@ public class AssistantService : IAssistantService
                     _logger.LogWarning("Unrecognized role '{Role}' in conversation history; coercing to 'model'.", msg.Role);
                     normalizedRole = "model";
                 }
-
                 contentsArray.Add(new JsonObject
                 {
                     ["role"] = normalizedRole,
@@ -398,7 +356,6 @@ public class AssistantService : IAssistantService
                 });
             }
         }
-
         if (!string.IsNullOrWhiteSpace(contextBlock))
         {
             contentsArray.Add(new JsonObject
@@ -407,7 +364,6 @@ public class AssistantService : IAssistantService
                 ["parts"] = new JsonArray(new JsonObject { ["text"] = contextBlock })
             });
         }
-
         // Simple payload-size estimate and guard. If payload seems too large, ask user to clear chat to continue.
         var estimatedSize = systemPrompt.Length + normalizedQuestion.Length + historyChars + combinedResume.Length + contextBlock.Length;
         var sizeThreshold = Math.Max(20000, maxChars * 2);
@@ -419,7 +375,6 @@ public class AssistantService : IAssistantService
                 LatencyMs = sw.Elapsed.TotalMilliseconds
             };
         }
-
         // Add resume/context as a model message (system-equivalent), then add the user's question as a user message
         if (!string.IsNullOrWhiteSpace(combinedResume))
         {
@@ -429,14 +384,12 @@ public class AssistantService : IAssistantService
                 ["parts"] = new JsonArray(new JsonObject { ["text"] = $"Resume context:\n{combinedResume}" })
             });
         }
-
         // Add current user question
         contentsArray.Add(new JsonObject
         {
             ["role"] = "user",
             ["parts"] = new JsonArray(new JsonObject { ["text"] = normalizedQuestion })
         });
-
         var generationConfig = new JsonObject();
         if (genConfigNode.TryGetPropertyValue("temperature", out var tempNode)) 
             generationConfig["temperature"] = JsonNode.Parse(tempNode!.ToJsonString());
@@ -448,7 +401,6 @@ public class AssistantService : IAssistantService
             generationConfig["maxOutputTokens"] = JsonNode.Parse(maxNode!.ToJsonString());
         if (genConfigNode.TryGetPropertyValue("candidateCount", out var candNode)) 
             generationConfig["candidateCount"] = JsonNode.Parse(candNode!.ToJsonString());
-
         var payloadNode = new JsonObject
         {
             ["contents"] = contentsArray,
@@ -460,7 +412,6 @@ public class AssistantService : IAssistantService
                 new JsonObject { ["category"] = "HARM_CATEGORY_DANGEROUS_CONTENT", ["threshold"] = "BLOCK_MEDIUM_AND_ABOVE" }
             )
         };
-
         var json = payloadNode.ToJsonString();
         _logger.LogDebug(
             "Prepared Gemini request: questionLength={QuestionLength}, historyCount={HistoryCount}, chunkCount={ChunkCount}, estimatedSize={EstimatedSize}",
@@ -468,27 +419,22 @@ public class AssistantService : IAssistantService
             normalizedHistory?.Length ?? 0,
             filteredChunks.Length,
             estimatedSize);
-
         var estimatedInputTokens = (int)Math.Ceiling((normalizedQuestion.Length + historyChars + combinedResume.Length + contextBlock.Length) / 4d);
         var routing = await _orchestrator
             .BuildDecisionAsync(normalizedQuestion, estimatedInputTokens, cancellationToken)
             .ConfigureAwait(false);
-
         var modelsToTry = routing.CandidateModels.ToList();
         if (modelsToTry.Count == 0)
         {
             _logger.LogError("No Gemini models configured");
             return new AiResponse { Text = "Service configuration error. Please try again later." };
         }
-
         var modelCallSw = Stopwatch.StartNew();
         AiModelRequests.Add(1, KeyValuePair.Create<string, object?>("model", routing.SelectedPrimaryModel ?? modelsToTry[0]));
-
         (string? responseBody, string? usedModel) = await _gateway
             .SendGenerationRequestAsync(json, modelsToTry.Distinct(StringComparer.OrdinalIgnoreCase), cancellationToken)
             .ConfigureAwait(false);
         modelCallSw.Stop();
-
         if (string.IsNullOrWhiteSpace(responseBody))
         {
             _logger.LogWarning("No successful response received from Gemini models");
@@ -506,12 +452,10 @@ public class AssistantService : IAssistantService
                 EstimatedCostUsd = routing.EstimatedCostUsd
             };
         }
-
         try
         {
             _logger.LogDebug("Gemini response body: {Body}", responseBody);
             using var doc = JsonDocument.Parse(responseBody);
-
             // Try to extract a text reply from multiple possible response shapes returned by Gemini
             string? TryExtractText(JsonElement el, int depth = 0)
             {
@@ -563,7 +507,6 @@ public class AssistantService : IAssistantService
                 }
                 return null;
             }
-
             var root = doc.RootElement;
             var replyText = TryExtractText(root);
             if (string.IsNullOrWhiteSpace(replyText))
@@ -584,19 +527,16 @@ public class AssistantService : IAssistantService
                     EstimatedCostUsd = routing.EstimatedCostUsd
                 };
             }
-
             AssistantRequests.Add(1,
                 KeyValuePair.Create<string, object?>("endpoint", "assistant.ask"),
                 KeyValuePair.Create<string, object?>("success", true));
             AssistantLatency.Record(sw.Elapsed.TotalMilliseconds,
                 KeyValuePair.Create<string, object?>("endpoint", "assistant.ask"));
-
             var modelUsed = usedModel ?? routing.SelectedPrimaryModel;
             if (!string.IsNullOrWhiteSpace(modelUsed))
             {
                 AiModelLatencyMs.Record(modelCallSw.Elapsed.TotalMilliseconds, KeyValuePair.Create<string, object?>("model", modelUsed));
             }
-
             var finalResponse = ApplyResponseTruncation(replyText.Trim(), governance);
             var estimatedOutputTokens = EstimateTokens(finalResponse);
             if (CanUseResponseCache(governance))
@@ -609,7 +549,6 @@ public class AssistantService : IAssistantService
                         cancellationToken)
                     .ConfigureAwait(false);
             }
-
             var fallbackUsed = !string.Equals(modelUsed, routing.SelectedPrimaryModel, StringComparison.OrdinalIgnoreCase);
             if (fallbackUsed)
             {
@@ -617,7 +556,6 @@ public class AssistantService : IAssistantService
                     KeyValuePair.Create<string, object?>("from", routing.SelectedPrimaryModel ?? "unknown"),
                     KeyValuePair.Create<string, object?>("to", modelUsed ?? "unknown"));
             }
-
             _logger.LogInformation(
                 "AI model decision: class={RequestClass} selected={Selected} used={Used} fallback={Fallback} estimatedCostUsd={EstimatedCostUsd} inputTokens={InputTokens} scoreTop={ScoreTop}",
                 routing.RequestClass,
@@ -627,13 +565,11 @@ public class AssistantService : IAssistantService
                 routing.EstimatedCostUsd,
                 estimatedInputTokens,
                 routing.ScoreBreakdown.FirstOrDefault()?.FinalScore);
-
             if (!string.IsNullOrWhiteSpace(modelUsed) && routing.EstimatedCostUsd > 0m)
             {
                 _modelHealth?.RecordUsage(modelUsed, DateTimeOffset.UtcNow, routing.EstimatedInputTokens, estimatedOutputTokens, routing.EstimatedCostUsd);
                 AiCostEstimateTotal.Add((double)routing.EstimatedCostUsd, KeyValuePair.Create<string, object?>("model", modelUsed));
             }
-
             return new AiResponse
             {
                 Text = finalResponse,
@@ -661,7 +597,6 @@ public class AssistantService : IAssistantService
             };
         }
     }
-
     private bool CanUseResponseCache(AiGovernanceOptions governance)
     {
         return governance.EnableResponseCache &&
@@ -670,23 +605,19 @@ public class AssistantService : IAssistantService
                _featureFlags.EnableCache &&
                _featureFlags.EnableAiResponseCache;
     }
-
     private static string ApplyResponseTruncation(string response, AiGovernanceOptions governance)
     {
         if (!governance.EnableResponseTruncation)
         {
             return response;
         }
-
         var maxChars = Math.Max(200, governance.MaxResponseChars);
         if (response.Length <= maxChars)
         {
             return response;
         }
-
         return response[..maxChars] + "\n\n[Response truncated for safety.]";
     }
-
     private async Task<(string PayloadJson, AiRoutingDecision Routing)> BuildPromptPayloadAsync(
         string question,
         ConversationMessage[]? history,
@@ -701,29 +632,24 @@ public class AssistantService : IAssistantService
                 Content = _promptBuilder.NormalizeInput(x.Content)
             })
             .ToArray();
-
-        var snapshot = await _resumeProvider.GetResumeChunksAsync(cancellationToken).ConfigureAwait(false);
         var includePersonalDetails = _options.Value.IncludePersonalDetails;
         var relevantChunks = await _resumeProvider.GetRelevantChunksAsync(question, cancellationToken).ConfigureAwait(false);
         var filteredChunks = includePersonalDetails
             ? relevantChunks
             : relevantChunks.Where(c => !c.Label.Contains("Personal", StringComparison.OrdinalIgnoreCase)).ToArray();
-
         var combinedResume = string.Join("\n\n", filteredChunks.Select(c => $"{c.Label}: {c.Content}"));
         var contextBlock = _promptBuilder.NormalizeContextBlock(context);
-
         var maxChars = _options.Value.PromptMaxChars;
         if (combinedResume.Length > maxChars)
         {
             combinedResume = combinedResume[..maxChars] + "\n\n...[truncated resume context]";
         }
-
         var systemPrompt = _promptBuilder.BuildSystemPrompt();
-        if (snapshot.Length == 0)
+        // If no resume context is available, include a brief note so downstream prompts can handle it
+        if (string.IsNullOrWhiteSpace(combinedResume))
         {
-            systemPrompt += "\n\nNote: I don't have access to the user's resume. Answer based on general knowledge and be explicit when information is missing. Offer concise suggestions for follow-up questions to get more details.";
+            systemPrompt += "\n\nNote: I don't have access to the user's resume";
         }
-
         var contentsArray = new JsonArray
         {
             new JsonObject
@@ -732,7 +658,6 @@ public class AssistantService : IAssistantService
                 ["parts"] = new JsonArray(new JsonObject { ["text"] = systemPrompt })
             }
         };
-
         var historyChars = 0;
         if (normalizedHistory is { Length: > 0 })
         {
@@ -742,12 +667,10 @@ public class AssistantService : IAssistantService
                 {
                     continue;
                 }
-
                 historyChars += msg.Content.Length;
                 var role = string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase)
                     ? "user"
                     : "model";
-
                 contentsArray.Add(new JsonObject
                 {
                     ["role"] = role,
@@ -755,7 +678,6 @@ public class AssistantService : IAssistantService
                 });
             }
         }
-
         if (!string.IsNullOrWhiteSpace(contextBlock))
         {
             contentsArray.Add(new JsonObject
@@ -764,7 +686,6 @@ public class AssistantService : IAssistantService
                 ["parts"] = new JsonArray(new JsonObject { ["text"] = contextBlock })
             });
         }
-
         if (!string.IsNullOrWhiteSpace(combinedResume))
         {
             contentsArray.Add(new JsonObject
@@ -773,13 +694,11 @@ public class AssistantService : IAssistantService
                 ["parts"] = new JsonArray(new JsonObject { ["text"] = $"Resume context:\n{combinedResume}" })
             });
         }
-
         contentsArray.Add(new JsonObject
         {
             ["role"] = "user",
             ["parts"] = new JsonArray(new JsonObject { ["text"] = normalizedQuestion })
         });
-
         var genConfig = _promptBuilder.BuildGenerationConfig(normalizedQuestion);
         var genConfigNode = JsonSerializer.SerializeToNode(genConfig) as JsonObject ?? new JsonObject();
         var generationConfig = new JsonObject();
@@ -787,27 +706,22 @@ public class AssistantService : IAssistantService
         {
             generationConfig["temperature"] = JsonNode.Parse(tempNode!.ToJsonString());
         }
-
         if (genConfigNode.TryGetPropertyValue("topK", out var topKNode))
         {
             generationConfig["topK"] = JsonNode.Parse(topKNode!.ToJsonString());
         }
-
         if (genConfigNode.TryGetPropertyValue("topP", out var topPNode))
         {
             generationConfig["topP"] = JsonNode.Parse(topPNode!.ToJsonString());
         }
-
         if (genConfigNode.TryGetPropertyValue("maxOutputTokens", out var maxNode))
         {
             generationConfig["maxOutputTokens"] = JsonNode.Parse(maxNode!.ToJsonString());
         }
-
         if (genConfigNode.TryGetPropertyValue("candidateCount", out var candNode))
         {
             generationConfig["candidateCount"] = JsonNode.Parse(candNode!.ToJsonString());
         }
-
         var payloadNode = new JsonObject
         {
             ["contents"] = contentsArray,
@@ -818,22 +732,18 @@ public class AssistantService : IAssistantService
                 new JsonObject { ["category"] = "HARM_CATEGORY_SEXUALLY_EXPLICIT", ["threshold"] = "BLOCK_MEDIUM_AND_ABOVE" },
                 new JsonObject { ["category"] = "HARM_CATEGORY_DANGEROUS_CONTENT", ["threshold"] = "BLOCK_MEDIUM_AND_ABOVE" })
         };
-
         var estimatedInputTokens = (int)Math.Ceiling((normalizedQuestion.Length + historyChars + combinedResume.Length + contextBlock.Length) / 4d);
         var routing = await _orchestrator
             .BuildDecisionAsync(normalizedQuestion, estimatedInputTokens, cancellationToken)
             .ConfigureAwait(false);
-
         return (payloadNode.ToJsonString(), routing);
     }
-
     private static int EstimateTokens(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
         {
             return 0;
         }
-
         var withoutControls = Regex.Replace(input, "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]", string.Empty);
         var normalized = Regex.Replace(withoutControls, "\\s+", " ").Trim();
         return (int)Math.Ceiling(normalized.Length / 4d);

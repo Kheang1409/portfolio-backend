@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Diagnostics;
-
 public sealed class AiRoutingDecision
 {
     public string? SelectedPrimaryModel { get; set; }
@@ -12,7 +11,6 @@ public sealed class AiRoutingDecision
     public bool FromCache { get; set; }
     public IReadOnlyList<AiModelScoreBreakdown> ScoreBreakdown { get; set; } = Array.Empty<AiModelScoreBreakdown>();
 }
-
 public sealed class AiModelScoreBreakdown
 {
     public string ModelName { get; set; } = string.Empty;
@@ -23,4 +21,4 @@ public sealed class AiModelScoreBreakdown
     public double CapabilityBonus { get; set; }
     public double CostPenalty { get; set; }
     public double FinalScore { get; set; }
-}
+}

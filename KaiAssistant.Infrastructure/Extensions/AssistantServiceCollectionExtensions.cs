@@ -7,20 +7,16 @@ using Polly;
 using Polly.Registry;
 using System.Net;
 using KaiAssistant.Application.Services;
-
 namespace KaiAssistant.Infrastructure.Extensions;
-
 public static class AssistantServiceCollectionExtensions
 {
     public static IServiceCollection AddGeminiAiServices(this IServiceCollection services, IConfiguration configuration)
     {
         var geminiSettings = configuration.GetSection("GeminiSettings");
         var configuredSettings = geminiSettings.Get<GeminiSettings>() ?? new GeminiSettings();
-
         string apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY")
                   ?? configuredSettings.ApiKey
                   ?? throw new ArgumentException("Gemini setting 'ApiKey' is missing or empty.");
-
         List<string> modelNames;
         var envModelNames = Environment.GetEnvironmentVariable("GEMINI_MODEL_NAMES");
         if (!string.IsNullOrWhiteSpace(envModelNames))
@@ -31,18 +27,14 @@ public static class AssistantServiceCollectionExtensions
         {
             modelNames = configuredSettings.ModelNames ?? new List<string>();
         }
-
         if (modelNames.Count == 0)
             throw new ArgumentException("Gemini setting 'ModelNames' is missing or empty.");
-
         string endpoint = Environment.GetEnvironmentVariable("GEMINI_ENDPOINT")
                           ?? configuredSettings.Endpoint
                           ?? throw new ArgumentException("Gemini setting 'Endpoint' is missing or empty.");
-
         string systemPrompt = Environment.GetEnvironmentVariable("GEMINI_SYSTEM_PROMPT")
                            ?? configuredSettings.SystemPrompt
                            ?? string.Empty;
-
         int promptMaxChars = configuredSettings.PromptMaxChars > 0 ? configuredSettings.PromptMaxChars : 10000;
         var envPromptMaxChars = Environment.GetEnvironmentVariable("GEMINI_PROMPT_MAX_CHARS");
         if (!string.IsNullOrWhiteSpace(envPromptMaxChars))
@@ -50,20 +42,17 @@ public static class AssistantServiceCollectionExtensions
             if (int.TryParse(envPromptMaxChars, out var parsed) && parsed > 0)
                 promptMaxChars = parsed;
         }
-
         bool includePersonalDetails = configuredSettings.IncludePersonalDetails;
         var envIncludePersonal = Environment.GetEnvironmentVariable("GEMINI_INCLUDE_PERSONAL_DETAILS");
         if (!string.IsNullOrWhiteSpace(envIncludePersonal) && bool.TryParse(envIncludePersonal, out var parsedInclude))
         {
             includePersonalDetails = parsedInclude;
         }
-
         var temperature = configuredSettings.Temperature;
         var topK = configuredSettings.TopK;
         var topP = configuredSettings.TopP;
         var maxOutputTokens = configuredSettings.MaxOutputTokens;
         var candidateCount = configuredSettings.CandidateCount;
-
         if (double.TryParse(Environment.GetEnvironmentVariable("GEMINI_TEMPERATURE"), out var envTemperature))
             temperature = envTemperature;
         if (int.TryParse(Environment.GetEnvironmentVariable("GEMINI_TOPK"), out var envTopK))
@@ -74,7 +63,6 @@ public static class AssistantServiceCollectionExtensions
             maxOutputTokens = envMaxOutputTokens;
         if (int.TryParse(Environment.GetEnvironmentVariable("GEMINI_CANDIDATE_COUNT"), out var envCandidateCount))
             candidateCount = envCandidateCount;
-
         services.Configure<GeminiSettings>(opts =>
         {
             opts.LastSuccessfulModelCacheTtlSeconds = configuredSettings.LastSuccessfulModelCacheTtlSeconds;
@@ -93,17 +81,13 @@ public static class AssistantServiceCollectionExtensions
             opts.MaxOutputTokens = maxOutputTokens;
             opts.CandidateCount = candidateCount;
         });
-
         var registry = services.AddPolicyRegistry();
-
         registry.Add("gemini-retry", Policy<HttpResponseMessage>
             .Handle<HttpRequestException>()
             .OrResult(msg => msg.StatusCode == HttpStatusCode.ServiceUnavailable)
             .WaitAndRetryAsync(5, retryAttempt =>
                 TimeSpan.FromMilliseconds(Math.Min(3000, 250 * Math.Pow(2, retryAttempt - 1))) + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 200))));
-
         registry.Add("gemini-timeout", Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(15)));
-
         services.AddHttpClient("Gemini", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
@@ -126,7 +110,6 @@ public static class AssistantServiceCollectionExtensions
         {
             var resilience = sp.GetRequiredService<IResilienceStatusProvider>();
             var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("GeminiHttpClient");
-
             return Policy<HttpResponseMessage>
                 .Handle<HttpRequestException>()
                 .OrResult(msg => msg.StatusCode == HttpStatusCode.ServiceUnavailable)
@@ -147,9 +130,7 @@ public static class AssistantServiceCollectionExtensions
                     },
                     () => resilience.RecordCircuitState("ai", "HalfOpen"));
         });
-
         services.AddSingleton<IGeminiGateway, Gateways.GeminiGateway>();
-        services.AddScoped<IAssistantService, AssistantService>();
         return services;
     }
-}
+}

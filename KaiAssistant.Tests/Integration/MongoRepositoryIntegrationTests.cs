@@ -8,9 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using Xunit;
-
 namespace KaiAssistant.Tests.Integration;
-
 [Trait("Category","Integration")]
 public class MongoRepositoryIntegrationTests
 {
@@ -20,7 +18,6 @@ public class MongoRepositoryIntegrationTests
         var runner = MongoDbRunner.Start();
         var client = new MongoClient(runner.ConnectionString);
         var db = client.GetDatabase("testdb");
-
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(new MongoSettings { ConnectionString = runner.ConnectionString, DatabaseName = "testdb" });
@@ -30,14 +27,11 @@ public class MongoRepositoryIntegrationTests
         services.AddSingleton<IMongoWriteProvider, MongoWriteProvider>();
         services.AddScoped(typeof(IRepository<>), typeof(MongoRepository<>));
         var sp = services.BuildServiceProvider();
-
         var repo = sp.GetRequiredService<IRepository<Resume>>();
         var resume = new Resume { Summary = "Test resume" };
         await repo.InsertAsync(resume);
-
         var all = await repo.GetAllAsync();
         Assert.NotEmpty(all);
-
         runner.Dispose();
     }
 }

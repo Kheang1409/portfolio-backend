@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Interfaces;
-
 public interface IUnitOfWorkSession : IAsyncDisposable
 {
     Task CommitAsync(CancellationToken cancellationToken = default);

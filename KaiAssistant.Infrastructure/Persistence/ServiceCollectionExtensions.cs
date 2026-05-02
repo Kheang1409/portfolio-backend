@@ -9,31 +9,39 @@ using KaiAssistant.Infrastructure.Observability;
 using KaiAssistant.Domain.Interfaces.Repositories;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
+using KaiAssistant.Application.Services;
 using KaiAssistant.Infrastructure.EventBus;
 using KaiAssistant.Infrastructure.Governance;
 using KaiAssistant.Infrastructure.AI;
+using KaiAssistant.Infrastructure.AI.Caching;
+using KaiAssistant.Infrastructure.AI.Conversation;
+using KaiAssistant.Infrastructure.AI.Providers;
+using KaiAssistant.Infrastructure.AI.Rag;
 using KaiAssistant.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-
 namespace KaiAssistant.Infrastructure.Persistence;
-
 public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSingleton(configuration);
         services.Configure<FeatureFlagsOptions>(configuration.GetSection(FeatureFlagsOptions.SectionName));
         services.Configure<DistributedCacheOptions>(configuration.GetSection(DistributedCacheOptions.SectionName));
         services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
         services.Configure<OutboxProcessorOptions>(configuration.GetSection(OutboxProcessorOptions.SectionName));
         services.Configure<AiGovernanceOptions>(configuration.GetSection(AiGovernanceOptions.SectionName));
         services.Configure<AiModelOrchestrationOptions>(configuration.GetSection(AiModelOrchestrationOptions.SectionName));
-
+        services.Configure<AiOrchestrationOptions>(configuration.GetSection(AiOrchestrationOptions.SectionName));
+        services.Configure<SemanticCacheOptions>(configuration.GetSection(SemanticCacheOptions.SectionName));
+        services.Configure<RagOptions>(configuration.GetSection(RagOptions.SectionName));
+        services.Configure<ConversationOptions>(configuration.GetSection(ConversationOptions.SectionName));
+        services.Configure<FeatureFlagStoreOptions>(configuration.GetSection(FeatureFlagStoreOptions.SectionName));
+        services.Configure<AiEvaluationOptions>(configuration.GetSection(AiEvaluationOptions.SectionName));
         services
             .AddGeminiAiServices(configuration)
             .AddEmailServices(configuration)
             .AddMongo(configuration);
-
-        services.AddSingleton<IFeatureFlagService, ConfigurationFeatureFlagService>();
+        services.AddSingleton<IFeatureFlagService, DynamicFeatureFlagService>();
         services.AddSingleton<IInstanceIdentity, InstanceIdentity>();
         services.AddSingleton<IRedisConnectionFactory, RedisConnectionFactory>();
         services.AddSingleton<RedisExecutionHelper>();
@@ -43,6 +51,17 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICacheService>(sp => sp.GetRequiredService<RedisCacheService>());
         services.AddSingleton<ICacheDiagnosticsService>(sp => sp.GetRequiredService<RedisCacheService>());
         services.AddSingleton<IAiUsageGuard, AiUsageGuard>();
+        services.AddSingleton<IPromptSecurityService, PromptSecurityService>();
+        services.AddSingleton<IEmbeddingService, DeterministicEmbeddingService>();
+        services.AddScoped<ISemanticCacheService, SemanticCacheService>();
+        services.AddScoped<IRagService, RagService>();
+        services.AddScoped<IConversationService, ConversationService>();
+        services.AddScoped<IAiEvaluationService, AiEvaluationService>();
+        services.AddScoped<IAiProvider, GeminiProvider>();
+        services.AddScoped<IAiProvider, OpenAiProvider>();
+        services.AddScoped<IAiProvider, LocalLlmProvider>();
+        services.AddScoped<IAiOrchestratorService, AiOrchestratorService>();
+        services.AddScoped<IAssistantService, AssistantService>();
         services.AddSingleton<IModelHealthService, ModelHealthService>();
         services.AddSingleton<IAiTuningState, AiTuningState>();
         services.AddSingleton<IAiDecisionAuditStore, AiDecisionAuditStore>();
@@ -56,7 +75,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IIntegrationEventPublisher, RabbitMqIntegrationEventPublisher>();
         services.AddScoped(typeof(IRepository<>), typeof(MongoRepository<>));
         services.AddScoped<IUnitOfWork, MongoUnitOfWork>();
-
         services.AddHostedService<OutboxProcessorHostedService>();
         services.AddHostedService<RedisWarmupHostedService>();
         services.AddHostedService<MongoIndexInitializerHostedService>();
@@ -65,7 +83,6 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<ModelHealthPersistenceHostedService>();
         services.AddHostedService<AiAutoTuneHostedService>();
         services.AddHostedService<AiTrafficSimulationHostedService>();
-
         return services;
     }
 }

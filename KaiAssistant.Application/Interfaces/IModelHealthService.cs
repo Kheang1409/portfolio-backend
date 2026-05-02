@@ -1,7 +1,5 @@
 using KaiAssistant.Application.Diagnostics;
-
 namespace KaiAssistant.Application.Interfaces;
-
 public interface IModelHealthService
 {
     bool CanAttempt(string modelName, DateTimeOffset utcNow);
@@ -16,4 +14,4 @@ public interface IModelHealthService
     long GetStateVersion();
     void FlushPendingChanges(DateTimeOffset utcNow);
     AiModelHealthSnapshot GetSnapshot(DateTimeOffset utcNow);
-}
+}

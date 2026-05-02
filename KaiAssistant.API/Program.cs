@@ -11,19 +11,18 @@ using KaiAssistant.Application.Options;
 using KaiAssistant.Infrastructure.FeatureFlags;
 using KaiAssistant.Infrastructure.EventBus;
 using KaiAssistant.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using System.Text.Json;
-
 var builder = WebApplication.CreateBuilder(args);
-
 ValidateCriticalConfiguration(builder.Configuration, builder.Environment);
-
 builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 {
     loggerConfiguration
@@ -31,9 +30,7 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
         .ReadFrom.Services(services)
         .Enrich.FromLogContext();
 });
-
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
-
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService(
         serviceName: "KaiAssistant.API",
@@ -43,12 +40,10 @@ builder.Services.AddOpenTelemetry()
         tb.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddSource("KaiAssistant.OutboxProcessor");
-
         if (builder.Environment.IsDevelopment())
         {
             tb.AddConsoleExporter();
         }
-
         var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
         if (!string.IsNullOrWhiteSpace(otlpEndpoint))
         {
@@ -66,13 +61,12 @@ builder.Services.AddOpenTelemetry()
         .AddMeter("KaiAssistant.RateLimiting")
         .AddMeter("KaiAssistant.AiModels")
         .AddMeter("KaiAssistant.Redis")
+        .AddMeter("KaiAssistant.AiOrchestrator")
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation());
-
-
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructure(builder.Configuration);
-
+builder.Services.AddAiOrchestration(builder.Configuration);
 builder.Services.AddConfiguredCors(builder.Configuration);
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache();
@@ -82,66 +76,77 @@ builder.Services.AddResponseCompression(options =>
     options.Providers.Add<BrotliCompressionProvider>();
     options.Providers.Add<GzipCompressionProvider>();
 });
-
 builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
-
 builder.Services.AddOptions<RateLimitingOptions>()
     .Bind(builder.Configuration.GetSection(RateLimitingOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-
 builder.Services.AddOptions<RequestHardeningOptions>()
     .Bind(builder.Configuration.GetSection(RequestHardeningOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-
 builder.Services.AddOptions<OpsOptions>()
     .Bind(builder.Configuration.GetSection(OpsOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-
 builder.Services.AddOptions<OutboxRecoveryOptions>()
     .Bind(builder.Configuration.GetSection(OutboxRecoveryOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-
 builder.Services.AddOptions<AiGovernanceOptions>()
     .Bind(builder.Configuration.GetSection(AiGovernanceOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-
 builder.Services.AddOptions<AiStreamingOptions>()
     .Bind(builder.Configuration.GetSection(AiStreamingOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-
 builder.Services.AddOptions<AiModelOrchestrationOptions>()
     .Bind(builder.Configuration.GetSection(AiModelOrchestrationOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-
+builder.Services.AddOptions<AiOrchestrationOptions>()
+    .Bind(builder.Configuration.GetSection(AiOrchestrationOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<SemanticCacheOptions>()
+    .Bind(builder.Configuration.GetSection(SemanticCacheOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<RagOptions>()
+    .Bind(builder.Configuration.GetSection(RagOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<ConversationOptions>()
+    .Bind(builder.Configuration.GetSection(ConversationOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<FeatureFlagStoreOptions>()
+    .Bind(builder.Configuration.GetSection(FeatureFlagStoreOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<AiEvaluationOptions>()
+    .Bind(builder.Configuration.GetSection(AiEvaluationOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services.AddOptions<OpsSecurityOptions>()
     .Bind(builder.Configuration.GetSection(OpsSecurityOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-
 builder.Services.AddOptions<LoadTestHooksOptions>()
     .Bind(builder.Configuration.GetSection(LoadTestHooksOptions.SectionName))
     .ValidateOnStart();
-
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IClientContextAccessor, HttpClientContextAccessor>();
 builder.Services.AddSingleton<IRateLimitTelemetry, RateLimitTelemetry>();
 builder.Services.AddSingleton<IOperationalSimulationState, OperationalSimulationState>();
-
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddCheck<MongoDbHealthCheck>("mongodb", tags: ["ready"])
     .AddCheck<RedisHealthCheck>("redis", tags: ["ready"])
     .AddCheck<RabbitMqHealthCheck>("rabbitmq", tags: ["ready"])
     .AddCheck<AiProviderHealthCheck>("ai-provider", tags: ["ready"]);
-
 builder.Services.AddSingleton<IExceptionHandler, ArgumentExceptionHandler>();
 builder.Services.AddSingleton<IExceptionHandler, UnauthorizedAccessExceptionHandler>();
 builder.Services.AddSingleton<IExceptionHandler, InvalidOperationExceptionHandler>();
@@ -149,7 +154,6 @@ builder.Services.AddSingleton<IExceptionHandler, NotFoundExceptionHandler>();
 builder.Services.AddSingleton<IExceptionHandler, ValidationExceptionHandler>();
 builder.Services.AddSingleton<IExceptionHandler, RequestTimeoutExceptionHandler>();
 builder.Services.AddSingleton<IExceptionHandler, UnhandledExceptionHandler>();
-
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddControllers()
@@ -160,9 +164,22 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.WriteIndented = false;
     });
 builder.Services.AddAuthorization();
-
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var securityOptions = builder.Configuration.GetSection(OpsSecurityOptions.SectionName).Get<OpsSecurityOptions>() ?? new OpsSecurityOptions();
+        options.Authority = securityOptions.JwtAuthority;
+        options.Audience = securityOptions.JwtAudience;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = !string.IsNullOrWhiteSpace(securityOptions.JwtAuthority),
+            ValidateAudience = !string.IsNullOrWhiteSpace(securityOptions.JwtAudience),
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true
+        };
+    });
 var app = builder.Build();
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -172,7 +189,6 @@ else
 {
     app.UseHsts();
 }
-
 app.UseSerilogRequestLogging();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<EndpointMetricsMiddleware>();
@@ -181,10 +197,8 @@ app.UseMiddleware<RequestSizeLimitMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseCors("AllowNetlifyApp");
 app.UseResponseCompression();
-
 app.UseOutputCache();
 app.UseMiddleware<RedisRateLimitingMiddleware>();
-
 app.UseMiddleware<GlobalExceptionMiddleware>();
 var httpsUrlConfigured = builder.Configuration.GetSection("Kestrel").Exists() ||
                          (builder.Configuration["ASPNETCORE_URLS"]?.Contains("https://") ?? false);
@@ -192,9 +206,8 @@ if (httpsUrlConfigured)
 {
     app.UseHttpsRedirection();
 }
-
+app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
@@ -212,26 +225,21 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
                 description = e.Value.Description
             })
         };
-
         await httpContext.Response.WriteAsJsonAsync(payload).ConfigureAwait(false);
     }
 });
-
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("live")
 });
-
 app.MapControllers();
 app.Run();
-
 static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnvironment environment)
 {
     if (!environment.IsProduction())
     {
         return;
     }
-
     var mongoConn = FirstNonEmpty(
         Environment.GetEnvironmentVariable("MONGODB_CONNECTIONSTRING"),
         configuration["MongoDB:ConnectionString"]);
@@ -242,9 +250,7 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
     {
         throw new InvalidOperationException("MongoDB configuration is required in production.");
     }
-
     var flags = configuration.GetSection(FeatureFlagsOptions.SectionName).Get<FeatureFlagsOptions>() ?? new FeatureFlagsOptions();
-
     if (flags.EnableCache)
     {
         var redisConn = FirstNonEmpty(
@@ -254,13 +260,11 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
         {
             throw new InvalidOperationException("Redis configuration is required when cache feature is enabled in production.");
         }
-
         if (!redisConn.StartsWith("rediss://", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Redis connection must use rediss:// in production.");
         }
     }
-
     if (flags.EnableRabbitMqPublishing)
     {
         var rabbit = configuration.GetSection(RabbitMqOptions.SectionName).Get<RabbitMqOptions>() ?? new RabbitMqOptions();
@@ -269,7 +273,6 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
             throw new InvalidOperationException("RabbitMQ configuration is invalid for production publishing.");
         }
     }
-
     var aiGovernance = configuration.GetSection(AiGovernanceOptions.SectionName).Get<AiGovernanceOptions>() ?? new AiGovernanceOptions();
     if (aiGovernance.Enabled)
     {
@@ -278,7 +281,6 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
             throw new InvalidOperationException("AI governance limits must be positive in production.");
         }
     }
-
     static string? FirstNonEmpty(params string?[] candidates)
     {
         foreach (var candidate in candidates)
@@ -288,7 +290,6 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
                 return candidate;
             }
         }
-
         return null;
     }
 }

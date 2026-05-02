@@ -1,5 +1,4 @@
 namespace KaiAssistant.Domain.Entities;
-
 public class AssistantBehaviorSettings
 {
     public string SystemPrompt { get; set; } = """

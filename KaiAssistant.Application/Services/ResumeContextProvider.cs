@@ -9,37 +9,30 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-
 namespace KaiAssistant.Application.Services;
-
 public class ResumeContextProvider : IResumeContextProvider
 {
     private readonly IResumeRepository _resumeRepository;
     private readonly ICacheService _cacheService;
     private readonly ILogger<ResumeContextProvider> _logger;
-
     private ResumeChunk[] _resumeChunks = Array.Empty<ResumeChunk>();
     private const int ChunkSize = 500;
-
     public ResumeContextProvider(IResumeRepository resumeRepository, ICacheService cacheService, ILogger<ResumeContextProvider> logger)
     {
         _resumeRepository = resumeRepository;
         _cacheService = cacheService;
         _logger = logger;
     }
-
     public async Task<ResumeChunk[]> GetResumeChunksAsync(CancellationToken cancellationToken = default)
     {
         if (_resumeChunks.Length > 0)
             return _resumeChunks;
-
         var cached = await _cacheService.GetAsync<ResumeChunk[]>(CacheKeys.ResumeChunks(), cancellationToken).ConfigureAwait(false);
         if (cached is { Length: > 0 })
         {
             _resumeChunks = cached;
             return _resumeChunks;
         }
-
         var resume = await _resumeRepository.GetLatestAsync(cancellationToken).ConfigureAwait(false);
         if (resume == null)
         {
@@ -47,9 +40,7 @@ public class ResumeContextProvider : IResumeContextProvider
             _resumeChunks = Array.Empty<ResumeChunk>();
             return _resumeChunks;
         }
-
         var newList = new List<ResumeChunk>();
-
         if (resume.Personals != null)
         {
             var p = resume.Personals;
@@ -64,14 +55,11 @@ public class ResumeContextProvider : IResumeContextProvider
             if (!string.IsNullOrWhiteSpace(p.Portfolio)) personalLines.Add($"Portfolio: {p.Portfolio}");
             AddChunkToList(newList, "Personal Details", string.Join("\n", personalLines));
         }
-
         AddChunkToList(newList, "Summary", resume.Summary ?? string.Empty);
-
         if (resume.Skills != null && resume.Skills.Any())
         {
             AddChunkToList(newList, "Skills", string.Join(", ", resume.Skills));
         }
-
         if (resume.Experiences != null)
         {
             foreach (var job in resume.Experiences)
@@ -86,14 +74,11 @@ public class ResumeContextProvider : IResumeContextProvider
                     var end = job.EndDate.HasValue ? job.EndDate.Value.ToString("yyyy-MM") : "Present";
                     lines.Add($"Dates: {start} - {end}");
                 }
-
                 if (job.BulletPoints != null && job.BulletPoints.Any())
                     lines.Add(string.Join("\n", job.BulletPoints));
-
                 AddChunkToList(newList, $"Experience at {job.Company}", string.Join("\n", lines));
             }
         }
-
         if (resume.Educations != null)
         {
             foreach (var education in resume.Educations)
@@ -109,11 +94,9 @@ public class ResumeContextProvider : IResumeContextProvider
                     var end = education.EndDate.HasValue ? education.EndDate.Value.ToString("yyyy-MM") : "Present";
                     lines.Add($"Dates: {start} - {end}");
                 }
-
                 AddChunkToList(newList, $"Education: {education.Institution}", string.Join("\n", lines));
             }
         }
-
         if (resume.Certifications != null)
         {
             foreach (var cert in resume.Certifications)
@@ -123,11 +106,9 @@ public class ResumeContextProvider : IResumeContextProvider
                 if (!string.IsNullOrWhiteSpace(cert.Title)) lines.Add(cert.Title);
                 if (!string.IsNullOrWhiteSpace(cert.Issuer)) lines.Add($"Issuer: {cert.Issuer}");
                 if (cert.Date.HasValue) lines.Add($"Date: {cert.Date.Value:yyyy-MM}");
-
                 AddChunkToList(newList, $"Certification: {cert.Title}", string.Join(" | ", lines));
             }
         }
-
         if (resume.Projects != null)
         {
             foreach (var project in resume.Projects)
@@ -135,12 +116,10 @@ public class ResumeContextProvider : IResumeContextProvider
                 AddChunkToList(newList, $"Project: {project?.Name}", project?.Description ?? string.Empty);
             }
         }
-
         _resumeChunks = newList.ToArray();
         await _cacheService.SetAsync(CacheKeys.ResumeChunks(), _resumeChunks, TimeSpan.FromMinutes(2), cancellationToken).ConfigureAwait(false);
         return _resumeChunks;
     }
-
     public async Task<ResumeChunk[]> GetRelevantChunksAsync(string question, CancellationToken cancellationToken = default)
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(question.ToLowerInvariant())));
@@ -149,10 +128,8 @@ public class ResumeContextProvider : IResumeContextProvider
         {
             return cached;
         }
-
         var snapshot = await GetResumeChunksAsync(cancellationToken).ConfigureAwait(false);
         if (snapshot == null || snapshot.Length == 0) return Array.Empty<ResumeChunk>();
-
         var questionLower = question.ToLowerInvariant();
         var keywordMappings = new Dictionary<string, string[]>
         {
@@ -162,7 +139,6 @@ public class ResumeContextProvider : IResumeContextProvider
             { "project", new[] { "project", "built", "created", "developed", "portfolio" } },
             { "summary", new[] { "about", "who", "background", "introduction", "profile" } }
         };
-
         var scoredChunks = snapshot.Select(chunk =>
         {
             int score = 0;
@@ -179,18 +155,15 @@ public class ResumeContextProvider : IResumeContextProvider
                 .Split(new[] { ' ', '?', '!', '.' }, StringSplitOptions.RemoveEmptyEntries)
                 .Where(w => w.Length > 3)
                 .ToArray();
-
             foreach (var word in questionWords) if (chunkLower.Contains(word)) score += 2;
             return new { Chunk = chunk, Score = score };
         })
         .OrderByDescending(x => x.Score)
         .ToList();
-
         var maxChunks = 8;
         var envTop = Environment.GetEnvironmentVariable("GEMINI_TOP_CHUNKS");
         if (!string.IsNullOrWhiteSpace(envTop) && int.TryParse(envTop, out var parsedTop) && parsedTop > 0)
             maxChunks = parsedTop;
-
         var topChunks = scoredChunks
             .Where(x => x.Score > 0 || (x.Chunk.Label != null && x.Chunk.Label.Contains("Summary")))
             .Take(maxChunks)
@@ -200,7 +173,6 @@ public class ResumeContextProvider : IResumeContextProvider
         await _cacheService.SetAsync(CacheKeys.RelevantChunks(hash), result, TimeSpan.FromSeconds(45), cancellationToken).ConfigureAwait(false);
         return result;
     }
-
     private void AddChunkToList(List<ResumeChunk> list, string label, string content, string source = "")
     {
         if (string.IsNullOrWhiteSpace(content)) return;
@@ -214,4 +186,4 @@ public class ResumeContextProvider : IResumeContextProvider
             });
         }
     }
-}
+}

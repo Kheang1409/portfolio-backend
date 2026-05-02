@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-
 namespace KaiAssistant.API.Controllers;
 [ApiController]
 [Route("api/health")]

@@ -1,26 +1,22 @@
 using KaiAssistant.Application.Interfaces;
 using MongoDB.Driver;
 using System;
-
 namespace KaiAssistant.Infrastructure.Persistence;
 public class MongoUnitOfWork : IUnitOfWork
 {
     private readonly IMongoClient _client;
     private readonly IMongoDatabase _database;
-
     public MongoUnitOfWork(IMongoClient client, IMongoDatabase database)
     {
         _client = client;
         _database = database;
     }
-
     public async Task<IUnitOfWorkSession> StartSessionAsync(CancellationToken cancellationToken = default)
     {
         var session = await _client.StartSessionAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         session.StartTransaction();
         return new MongoUnitOfWorkSession(session);
     }
-
     public async Task RunInTransactionAsync(Func<IUnitOfWorkSession, Task> operation, CancellationToken cancellationToken = default)
     {
         await using var session = await StartSessionAsync(cancellationToken).ConfigureAwait(false);
@@ -35,12 +31,10 @@ public class MongoUnitOfWork : IUnitOfWork
             throw;
         }
     }
-
     public ValueTask DisposeAsync()
     {
         return ValueTask.CompletedTask;
     }
-
     private class MongoUnitOfWorkSession : IUnitOfWorkSession
     {
         private readonly IClientSessionHandle _session;

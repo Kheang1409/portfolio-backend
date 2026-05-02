@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Diagnostics;
-
 public sealed class AiTuningWeightsSnapshot
 {
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
@@ -11,4 +10,4 @@ public sealed class AiTuningWeightsSnapshot
     public bool GuardrailFastMode { get; set; }
     public bool GuardrailCostMode { get; set; }
     public string Reason { get; set; } = "baseline";
-}
+}

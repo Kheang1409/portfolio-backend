@@ -1,18 +1,14 @@
 using KaiAssistant.Application.Diagnostics;
 using KaiAssistant.Application.Interfaces;
-
 namespace KaiAssistant.Infrastructure.HostedServices;
-
 public sealed class OutboxProcessorState : IOutboxProcessorState
 {
     private readonly object _sync = new();
     private readonly OutboxProcessorSnapshot _snapshot = new();
-
     public OutboxProcessorState(IInstanceIdentity instanceIdentity)
     {
         _snapshot.InstanceId = instanceIdentity.InstanceId;
     }
-
     public OutboxProcessorSnapshot Snapshot
     {
         get
@@ -30,7 +26,6 @@ public sealed class OutboxProcessorState : IOutboxProcessorState
             }
         }
     }
-
     public void MarkCycleStarted()
     {
         lock (_sync)
@@ -39,7 +34,6 @@ public sealed class OutboxProcessorState : IOutboxProcessorState
             _snapshot.LastCycleStartedAtUtc = DateTimeOffset.UtcNow;
         }
     }
-
     public void MarkCycleSucceeded()
     {
         lock (_sync)
@@ -49,7 +43,6 @@ public sealed class OutboxProcessorState : IOutboxProcessorState
             _snapshot.LastError = null;
         }
     }
-
     public void MarkCycleFailed(string error)
     {
         lock (_sync)
@@ -58,4 +51,4 @@ public sealed class OutboxProcessorState : IOutboxProcessorState
             _snapshot.LastError = error;
         }
     }
-}
+}

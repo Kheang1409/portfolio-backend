@@ -1,8 +1,6 @@
 using System;
 using KaiAssistant.Domain.Utilities;
-
 namespace KaiAssistant.Domain.Entities;
-
 public class EmailSettings
 {
     public string SmtpServer { get; private set; } = string.Empty;
@@ -11,7 +9,6 @@ public class EmailSettings
     public string RecieverEmail { get; private set; } = string.Empty;
     public string SenderPassword { get; private set; } = string.Empty;
     public bool Enabled { get; private set; } = true;
-
     public EmailSettings(
         string smtpServer,
         int port,
@@ -24,7 +21,6 @@ public class EmailSettings
         Guard.AgainstOutOfRange(port, 1, 65535, nameof(port));
         Guard.AgainstNullOrWhiteSpace(senderEmail, nameof(senderEmail));
         Guard.AgainstNullOrWhiteSpace(recieverEmail, nameof(recieverEmail));
-
         SmtpServer = smtpServer;
         Port = port;
         SenderEmail = senderEmail;
@@ -32,5 +28,4 @@ public class EmailSettings
         SenderPassword = senderPassword;
         Enabled = enabled;
     }
-
 }

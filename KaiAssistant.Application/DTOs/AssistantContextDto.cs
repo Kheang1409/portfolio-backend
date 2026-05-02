@@ -1,13 +1,10 @@
 using KaiAssistant.Domain.Entities;
-
 namespace KaiAssistant.Application.DTOs;
-
 public sealed class AssistantContextDto
 {
     public AssistantUserProfileDto? UserProfile { get; set; }
     public string? SystemPersona { get; set; }
     public Dictionary<string, string>? Metadata { get; set; }
-
     public AssistantContext ToDomain()
     {
         return new AssistantContext
@@ -25,10 +22,9 @@ public sealed class AssistantContextDto
         };
     }
 }
-
 public sealed class AssistantUserProfileDto
 {
     public string? UserId { get; set; }
     public string? DisplayName { get; set; }
     public string? Locale { get; set; }
-}
+}

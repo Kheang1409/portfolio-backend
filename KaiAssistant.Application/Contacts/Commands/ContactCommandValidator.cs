@@ -1,7 +1,5 @@
 using FluentValidation;
-
 namespace KaiAssistant.Application.Contacts.Commands;
-
 public class ContactCommandValidator : AbstractValidator<ContactCommand>
 {
     public ContactCommandValidator()
@@ -17,4 +15,4 @@ public class ContactCommandValidator : AbstractValidator<ContactCommand>
             .MinimumLength(2).WithMessage("Message at least 2 characters!")
             .MaximumLength(4000).WithMessage("Message cannot exceed 4000 characters.");
     }
-}
+}

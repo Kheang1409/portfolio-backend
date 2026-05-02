@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Interfaces;
-
 public interface IEventIdempotencyStore
 {
     Task<IdempotencyAcquireResult> TryAcquireAsync(string idempotencyKey, TimeSpan processingTtl, CancellationToken cancellationToken = default);
@@ -7,10 +6,9 @@ public interface IEventIdempotencyStore
     Task<bool> IsProcessedAsync(string idempotencyKey, CancellationToken cancellationToken = default);
     Task ReleaseAsync(string idempotencyKey, CancellationToken cancellationToken = default);
 }
-
 public enum IdempotencyAcquireResult
 {
     Acquired = 0,
     AlreadyProcessed = 1,
     Busy = 2
-}
+}

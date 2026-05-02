@@ -1,8 +1,6 @@
 using KaiAssistant.Domain.Entities.Outbox;
 using KaiAssistant.Application.Diagnostics;
-
 namespace KaiAssistant.Application.Interfaces;
-
 public interface IOutboxRepository
 {
     Task AddAsync(OutboxMessage message, CancellationToken cancellationToken = default);
@@ -22,4 +20,4 @@ public interface IOutboxRepository
     Task<int> ReplayFailedBatchAsync(int batchSize, DateTimeOffset nextAttemptAtUtc, CancellationToken cancellationToken = default);
     Task<bool> DeadLetterAsync(string id, string reason, DateTimeOffset deadLetteredAtUtc, CancellationToken cancellationToken = default);
     Task<OutboxStats> GetStatsAsync(DateTimeOffset utcNow, CancellationToken cancellationToken = default);
-}
+}

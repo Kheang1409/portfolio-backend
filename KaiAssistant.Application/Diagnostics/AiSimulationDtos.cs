@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Diagnostics;
-
 public sealed class AiSimulationMetricSnapshot
 {
     public DateTimeOffset CapturedAtUtc { get; set; }
@@ -11,7 +10,6 @@ public sealed class AiSimulationMetricSnapshot
     public int UnhealthyModelCount { get; set; }
     public IReadOnlyDictionary<string, long> SelectionCounts { get; set; } = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 }
-
 public sealed class AiSimulationRunReport
 {
     public DateTimeOffset StartedAtUtc { get; set; }
@@ -28,4 +26,4 @@ public sealed class AiSimulationRunReport
     public bool CostWithinLimit { get; set; }
     public string? BeforeTopModel { get; set; }
     public string? AfterTopModel { get; set; }
-}
+}

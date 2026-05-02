@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Diagnostics;
-
 public sealed class AiStreamChunk
 {
     public string Type { get; set; } = "delta";
@@ -14,4 +13,4 @@ public sealed class AiStreamChunk
     public string? ErrorCode { get; set; }
     public bool? Retryable { get; set; }
     public string? ErrorMessage { get; set; }
-}
+}

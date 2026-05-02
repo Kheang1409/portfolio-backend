@@ -3,9 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using KaiAssistant.Domain.Entities.Outbox;
-
 namespace KaiAssistant.Application.Events;
-
 public static class OutboxMessageFactory
 {
     public static OutboxMessage Create(IntegrationEvent integrationEvent)
@@ -16,7 +14,6 @@ public static class OutboxMessageFactory
         var eventIdempotencyKey = string.IsNullOrWhiteSpace(integrationEvent.IdempotencyKey)
             ? integrationEvent.EventId.ToString("N")
             : integrationEvent.IdempotencyKey;
-
         return new OutboxMessage
         {
             EventId = integrationEvent.EventId,
@@ -30,4 +27,4 @@ public static class OutboxMessageFactory
             TraceState = Activity.Current?.TraceStateString
         };
     }
-}
+}

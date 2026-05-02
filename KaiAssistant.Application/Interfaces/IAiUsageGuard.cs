@@ -1,8 +1,6 @@
 using KaiAssistant.Application.Diagnostics;
 using KaiAssistant.Domain.Entities;
-
 namespace KaiAssistant.Application.Interfaces;
-
 public interface IAiUsageGuard
 {
     Task<AiUsageDecision> EvaluateAsync(
@@ -13,4 +11,4 @@ public interface IAiUsageGuard
     void RecordTokensUsed(int inputTokens, int outputTokens);
     bool TryChargeBudget(decimal requestCostUsd, AssistantContext? context, out string? rejectionMessage);
     AiResponseDecision EvaluateResponse(string response);
-}
+}

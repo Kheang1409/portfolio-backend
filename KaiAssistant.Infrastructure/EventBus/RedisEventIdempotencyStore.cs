@@ -3,9 +3,7 @@ using KaiAssistant.Infrastructure.Cache;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-
 namespace KaiAssistant.Infrastructure.EventBus;
-
 public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
 {
     private const string ProcessedValue = "processed";
@@ -13,7 +11,6 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
     private readonly RedisExecutionHelper _redisExecution;
     private readonly ILogger<RedisEventIdempotencyStore> _logger;
     private readonly IMemoryCache _memoryCache;
-
     public RedisEventIdempotencyStore(
         IRedisConnectionFactory redisFactory,
         RedisExecutionHelper redisExecution,
@@ -25,14 +22,12 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
         _memoryCache = memoryCache;
         _logger = logger;
     }
-
     public async Task<IdempotencyAcquireResult> TryAcquireAsync(string idempotencyKey, TimeSpan processingTtl, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
             return IdempotencyAcquireResult.Acquired;
         }
-
         var key = BuildKey(idempotencyKey);
         if (_redisFactory.IsConfigured)
         {
@@ -44,20 +39,17 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
                     {
                         return IdempotencyAcquireResult.AlreadyProcessed;
                     }
-
                     var lockValue = $"processing:{Environment.MachineName}:{Guid.NewGuid():N}";
                     var acquired = await db.StringSetAsync(key, lockValue, processingTtl, When.NotExists).WaitAsync(ct).ConfigureAwait(false);
                     if (acquired)
                     {
                         return IdempotencyAcquireResult.Acquired;
                     }
-
                     var current = await db.StringGetAsync(key).WaitAsync(ct).ConfigureAwait(false);
                     if (current.HasValue && string.Equals(current.ToString(), ProcessedValue, StringComparison.Ordinal))
                     {
                         return IdempotencyAcquireResult.AlreadyProcessed;
                     }
-
                     return IdempotencyAcquireResult.Busy;
                 },
                 () =>
@@ -66,12 +58,10 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
                     {
                         return IdempotencyAcquireResult.AlreadyProcessed;
                     }
-
                     if (_memoryCache.TryGetValue<string>(key, out _))
                     {
                         return IdempotencyAcquireResult.Busy;
                     }
-
                     _memoryCache.Set(key, "processing", processingTtl);
                     return IdempotencyAcquireResult.Acquired;
                 },
@@ -79,28 +69,23 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
                 _logger,
                 cancellationToken).ConfigureAwait(false);
         }
-
         if (_memoryCache.TryGetValue<string>(key, out var status) && string.Equals(status, ProcessedValue, StringComparison.Ordinal))
         {
             return IdempotencyAcquireResult.AlreadyProcessed;
         }
-
         if (_memoryCache.TryGetValue<string>(key, out _))
         {
             return IdempotencyAcquireResult.Busy;
         }
-
         _memoryCache.Set(key, "processing", processingTtl);
         return IdempotencyAcquireResult.Acquired;
     }
-
     public async Task MarkProcessedAsync(string idempotencyKey, TimeSpan processedTtl, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
             return;
         }
-
         var key = BuildKey(idempotencyKey);
         if (_redisFactory.IsConfigured)
         {
@@ -110,23 +95,19 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
                 "idempotency:mark_processed",
                 _logger,
                 cancellationToken).ConfigureAwait(false);
-
             if (wrote)
             {
                 return;
             }
         }
-
         _memoryCache.Set(key, ProcessedValue, processedTtl);
     }
-
     public async Task<bool> IsProcessedAsync(string idempotencyKey, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
             return false;
         }
-
         var key = BuildKey(idempotencyKey);
         if (_redisFactory.IsConfigured)
         {
@@ -142,18 +123,15 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
                 _logger,
                 cancellationToken).ConfigureAwait(false);
         }
-
         return _memoryCache.TryGetValue<string>(key, out var status)
             && string.Equals(status, ProcessedValue, StringComparison.Ordinal);
     }
-
     public async Task ReleaseAsync(string idempotencyKey, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
             return;
         }
-
         var key = BuildKey(idempotencyKey);
         if (_redisFactory.IsConfigured)
         {
@@ -165,7 +143,6 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
                     {
                         return true;
                     }
-
                     await db.KeyDeleteAsync(key).WaitAsync(ct).ConfigureAwait(false);
                     return true;
                 },
@@ -173,21 +150,18 @@ public sealed class RedisEventIdempotencyStore : IEventIdempotencyStore
                 "idempotency:release",
                 _logger,
                 cancellationToken).ConfigureAwait(false);
-
             if (deleted)
             {
                 return;
             }
         }
-
         if (_memoryCache.TryGetValue<string>(key, out var status) && !string.Equals(status, ProcessedValue, StringComparison.Ordinal))
         {
             _memoryCache.Remove(key);
         }
     }
-
     private static string BuildKey(string idempotencyKey)
     {
         return $"idem:event:{idempotencyKey}";
     }
-}
+}

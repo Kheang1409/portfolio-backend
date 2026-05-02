@@ -9,11 +9,8 @@ using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using System.IO;
-
 #nullable enable
-
 namespace KaiAssistant.Tests;
-
 public class ServiceRegistrationTests
 {
     [Fact]
@@ -32,26 +29,20 @@ public class ServiceRegistrationTests
             ["EmailSettings:ReceiverEmail"] = "to@test",
             ["EmailSettings:SenderPassword"] = "pass"
         };
-
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(inMemorySettings)
             .Build();
-
         var services = new ServiceCollection();
         services.AddMemoryCache();
         services.AddSingleton<IHostEnvironment>(new FakeHostEnvironment());
         services.AddApplicationServices();
         services.AddInfrastructure(configuration);
-
         var provider = services.BuildServiceProvider();
-
         var assistant = provider.GetService<IAssistantService>();
         assistant.Should().NotBeNull();
-
         var resumeRepo = provider.GetService<KaiAssistant.Domain.Interfaces.Repositories.IResumeRepository>();
         resumeRepo.Should().NotBeNull();
     }
-
     private sealed class FakeHostEnvironment : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = Environments.Development;
@@ -59,4 +50,4 @@ public class ServiceRegistrationTests
         public string ContentRootPath { get; set; } = Directory.GetCurrentDirectory();
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
-}
+}

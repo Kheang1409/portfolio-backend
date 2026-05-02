@@ -1,19 +1,15 @@
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Infrastructure.Cache;
 using Microsoft.Extensions.Caching.Memory;
-
 namespace KaiAssistant.API.Services;
-
 public sealed class OperationalSimulationState : IOperationalSimulationState
 {
     private const string AiThrottleKey = "sim:ai:throttle:until";
     private const string OutboxDelayKey = "sim:outbox:delay:ms";
-
     private readonly IRedisConnectionFactory _redisFactory;
     private readonly RedisExecutionHelper _redisExecution;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<OperationalSimulationState> _logger;
-
     public OperationalSimulationState(
         IRedisConnectionFactory redisFactory,
         RedisExecutionHelper redisExecution,
@@ -25,7 +21,6 @@ public sealed class OperationalSimulationState : IOperationalSimulationState
         _memoryCache = memoryCache;
         _logger = logger;
     }
-
     public Task<DateTimeOffset?> GetForceAiThrottleUntilUtcAsync(CancellationToken cancellationToken = default)
     {
         return _redisExecution.ExecuteSafeAsync(
@@ -36,7 +31,6 @@ public sealed class OperationalSimulationState : IOperationalSimulationState
                 {
                     return null;
                 }
-
                 return DateTimeOffset.TryParse(value.ToString(), out var parsed) ? parsed : null;
             },
             () => _memoryCache.Get<DateTimeOffset?>(AiThrottleKey),
@@ -44,7 +38,6 @@ public sealed class OperationalSimulationState : IOperationalSimulationState
             _logger,
             cancellationToken);
     }
-
     public Task<int> GetOutboxArtificialDelayMsAsync(CancellationToken cancellationToken = default)
     {
         return _redisExecution.ExecuteSafeAsync(
@@ -60,19 +53,16 @@ public sealed class OperationalSimulationState : IOperationalSimulationState
             _logger,
             cancellationToken);
     }
-
     public async Task ForceAiThrottleForAsync(TimeSpan duration, CancellationToken cancellationToken = default)
     {
         var until = DateTimeOffset.UtcNow.Add(duration <= TimeSpan.Zero ? TimeSpan.FromSeconds(1) : duration);
         _memoryCache.Set(AiThrottleKey, until, TimeSpan.FromHours(1));
-
         var connection = await _redisFactory.GetConnectionAsync(cancellationToken).ConfigureAwait(false);
         if (connection is null)
         {
             RedisMetrics.RecordFallback("simulation:set_ai_throttle");
             return;
         }
-
         try
         {
             var db = connection.GetDatabase();
@@ -87,19 +77,16 @@ public sealed class OperationalSimulationState : IOperationalSimulationState
             _logger.LogWarning(ex, "Failed to persist AI throttle simulation state to Redis. Using memory fallback.");
         }
     }
-
     public async Task SetOutboxArtificialDelayAsync(int delayMs, CancellationToken cancellationToken = default)
     {
         var bounded = Math.Clamp(delayMs, 0, 15_000);
         _memoryCache.Set(OutboxDelayKey, bounded, TimeSpan.FromHours(1));
-
         var connection = await _redisFactory.GetConnectionAsync(cancellationToken).ConfigureAwait(false);
         if (connection is null)
         {
             RedisMetrics.RecordFallback("simulation:set_outbox_delay");
             return;
         }
-
         try
         {
             var db = connection.GetDatabase();
@@ -114,4 +101,4 @@ public sealed class OperationalSimulationState : IOperationalSimulationState
             _logger.LogWarning(ex, "Failed to persist outbox delay simulation state to Redis. Using memory fallback.");
         }
     }
-}
+}

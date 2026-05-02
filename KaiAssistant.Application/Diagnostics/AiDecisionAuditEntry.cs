@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Diagnostics;
-
 public sealed class AiDecisionAuditEntry
 {
     public DateTimeOffset CapturedAtUtc { get; set; }
@@ -12,9 +11,8 @@ public sealed class AiDecisionAuditEntry
     public IReadOnlyList<AiModelScoreBreakdown> Scores { get; set; } = Array.Empty<AiModelScoreBreakdown>();
     public IReadOnlyList<AiRejectedModelReason> Rejected { get; set; } = Array.Empty<AiRejectedModelReason>();
 }
-
 public sealed class AiRejectedModelReason
 {
     public string ModelName { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
-}
+}

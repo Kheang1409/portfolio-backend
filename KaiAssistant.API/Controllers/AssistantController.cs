@@ -1,132 +1,184 @@
 using Microsoft.AspNetCore.Mvc;
-using MediatR;
-using KaiAssistant.Application.AskAssistants.Commands;
+using KaiAssistant.Application.Diagnostics;
 using KaiAssistant.Application.DTOs;
 using KaiAssistant.Application.Interfaces;
-using KaiAssistant.Application.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
 namespace KaiAssistant.API.Controllers;
-
 [ApiController]
-[Route("/api/assistants")]
+[Route("/api/assistant")]
 public class AssistantController : ControllerBase
 {
-    private static readonly JsonSerializerOptions StreamJsonOptions = new()
+    private static readonly System.Text.Json.JsonSerializerOptions StreamJsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
-
-    private readonly IMediator _mediator;
-    private readonly IFeatureFlagService _flags;
-    private readonly IAssistantService _assistantService;
-
-    public AssistantController(IMediator mediator, IFeatureFlagService flags, IAssistantService assistantService)
+    private readonly IAssistantOrchestrator _orchestrator;
+    private readonly ILogger<AssistantController> _logger;
+    private readonly KaiAssistant.Application.Interfaces.IConversationRepository _conversationRepo;
+    public AssistantController(
+        IAssistantOrchestrator orchestrator,
+        ILogger<AssistantController> logger,
+        KaiAssistant.Application.Interfaces.IConversationRepository conversationRepo)
     {
-        _mediator = mediator;
-        _flags = flags;
-        _assistantService = assistantService;
+        _orchestrator = orchestrator;
+        _logger = logger;
+        _conversationRepo = conversationRepo;
     }
-
-    [HttpPost("ask")]
-    public async Task<IActionResult> Applied([FromBody] TextDto dto, CancellationToken cancellationToken)
+    [HttpPost]
+    public async Task Stream([FromBody] AssistantRequestDto dto, CancellationToken cancellationToken)
     {
-        var command = new AskAssistantCommand(dto.Message, dto.History, dto.Context?.ToDomain());
-        var response = await _mediator.Send(command, cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(response.ModelUsed))
+        var requestId = Guid.NewGuid().ToString("N")[..8];
+        if (!ModelState.IsValid)
         {
-            Response.Headers["X-AI-Model-Used"] = response.ModelUsed;
-        }
-
-        Response.Headers["X-AI-Latency-Ms"] = response.LatencyMs.ToString("F0");
-        Response.Headers["X-AI-Fallback-Used"] = response.FallbackUsed ? "true" : "false";
-        return Ok(response.Text);
-    }
-
-    [HttpPost("ask/batch")]
-    public async Task<IActionResult> AskBatch([FromBody] BatchTextDto dto, CancellationToken cancellationToken)
-    {
-        if (!_flags.EnableAssistantBatching)
-        {
-            return NotFound();
-        }
-
-        if (dto.Items is null || dto.Items.Length == 0)
-        {
-            return BadRequest(new { message = "At least one message is required." });
-        }
-
-        var batchSize = Math.Min(dto.Items.Length, 10);
-        var results = new List<string>(batchSize);
-
-        for (var i = 0; i < batchSize; i++)
-        {
-            var item = dto.Items[i];
-            var command = new AskAssistantCommand(item.Message, item.History, item.Context?.ToDomain());
-            var response = await _mediator.Send(command, cancellationToken).ConfigureAwait(false);
-            results.Add(response.Text);
-        }
-
-        return Ok(new
-        {
-            count = results.Count,
-            responses = results
-        });
-    }
-
-    [HttpPost("stream")]
-    public async Task Stream([FromBody] TextDto dto, CancellationToken cancellationToken)
-    {
-        if (!_flags.EnableStreaming)
-        {
-            Response.StatusCode = StatusCodes.Status409Conflict;
-            await Response.WriteAsJsonAsync(new
-            {
-                errorCode = "STREAMING_DISABLED",
-                retryable = false,
-                message = "Streaming is disabled. Use /api/assistants/ask instead."
-            }, cancellationToken).ConfigureAwait(false);
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            await Response.WriteAsJsonAsync(new { message = "Invalid request payload." }, cancellationToken)
+                .ConfigureAwait(false);
             return;
         }
-
+        // Resolve conversation id: prefer explicit ConversationId, else try sessionId from context metadata
+        var conversationId = dto.ConversationId;
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            var sessionId = dto.Context?.Metadata != null && dto.Context.Metadata.TryGetValue("sessionId", out var sid)
+                ? sid
+                : null;
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                // Try to find an existing conversation for this session (stored as UserId)
+                var list = await _conversationRepo.GetByUserIdAsync(sessionId, 1, cancellationToken).ConfigureAwait(false);
+                if (list != null && list.Count > 0)
+                {
+                    conversationId = list[0].ConversationId;
+                }
+                else
+                {
+                    var created = await _conversationRepo.CreateAsync(sessionId, cancellationToken).ConfigureAwait(false);
+                    conversationId = created.ConversationId;
+                }
+            }
+            else
+            {
+                conversationId = Guid.NewGuid().ToString("N");
+            }
+        }
+        var userId = HttpContext.User?.FindFirst("sub")?.Value; // From JWT claims
+        _logger.LogInformation(
+            "Stream start: RequestId={RequestId}, ConversationId={ConversationId}, UserMessage={Len} chars",
+            requestId, conversationId, dto.Message?.Length ?? 0);
         Response.StatusCode = StatusCodes.Status200OK;
         Response.ContentType = "application/x-ndjson";
         Response.Headers.CacheControl = "no-cache";
-
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, HttpContext.RequestAborted);
-
         try
         {
-            await foreach (var chunk in _assistantService
-                               .StreamQuestionAsync(dto.Message, dto.History, dto.Context?.ToDomain(), linkedCts.Token)
-                               .ConfigureAwait(false))
+            await foreach (var evt in _orchestrator.OrchestrateStreamAsync(
+                dto.Message ?? string.Empty,
+                conversationId,
+                userId,
+                linkedCts.Token)
+                .ConfigureAwait(false))
             {
-                await WriteStreamLineAsync(chunk, linkedCts.Token).ConfigureAwait(false);
+                var json = SerializeStreamEvent(evt, requestId);
+                await WriteStreamLineAsync(json, linkedCts.Token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (linkedCts.IsCancellationRequested)
         {
-            // Client disconnected or cancelled request; stop quietly.
-        }
-        catch (Exception)
-        {
-            await WriteStreamLineAsync(new AiStreamChunk
+            _logger.LogInformation("Stream cancelled: RequestId={RequestId}", requestId);
+            // Ensure terminal event
+            var cancelJson = System.Text.Json.JsonSerializer.Serialize(new
             {
-                Type = "error",
-                MessageId = Guid.NewGuid().ToString("N"),
-                ErrorCode = "STREAM_UNHANDLED",
-                Retryable = true,
-                ErrorMessage = "Streaming failed due to an internal error."
-            }, linkedCts.Token).ConfigureAwait(false);
+                type = "error",
+                messageId = requestId,
+                errorCode = "REQUEST_ABORTED",
+                retryable = false,
+                errorMessage = "Request cancelled."
+            }, StreamJsonOptions);
+            await WriteStreamLineAsync(cancelJson, CancellationToken.None).ConfigureAwait(false);
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Stream error: RequestId={RequestId}", requestId);
+            var err = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                type = "error",
+                messageId = requestId,
+                errorCode = "STREAM_FAILED",
+                retryable = true,
+                errorMessage = "Streaming failed. Please try again."
+            }, StreamJsonOptions);
+            await WriteStreamLineAsync(err, CancellationToken.None).ConfigureAwait(false);
+        }
+        _logger.LogInformation("Stream complete: RequestId={RequestId}", requestId);
     }
 
-    private async Task WriteStreamLineAsync(AiStreamChunk chunk, CancellationToken cancellationToken)
+    private static string SerializeStreamEvent(AssistantStreamEvent evt, string messageId)
     {
-        await JsonSerializer.SerializeAsync(Response.Body, chunk, StreamJsonOptions, cancellationToken).ConfigureAwait(false);
+        object payload = evt.Type switch
+        {
+            StreamEventType.Token => new
+            {
+                type = "delta",
+                messageId,
+                text = evt.Content
+            },
+            StreamEventType.End => new
+            {
+                type = "completed",
+                messageId
+            },
+            StreamEventType.Error => new
+            {
+                type = "error",
+                messageId,
+                errorCode = "STREAM_ERROR",
+                retryable = false,
+                errorMessage = evt.Error ?? "Streaming failed."
+            },
+            StreamEventType.Start => new
+            {
+                type = "delta",
+                messageId,
+                text = string.Empty
+            },
+            StreamEventType.Metadata => new
+            {
+                type = "delta",
+                messageId,
+                text = string.Empty
+            },
+            StreamEventType.ToolCall => new
+            {
+                type = "delta",
+                messageId,
+                text = evt.Content ?? string.Empty
+            },
+            StreamEventType.ToolResult => new
+            {
+                type = "delta",
+                messageId,
+                text = evt.Content ?? string.Empty
+            },
+            _ => new
+            {
+                type = "error",
+                messageId,
+                errorCode = "UNSUPPORTED_STREAM_EVENT",
+                retryable = false,
+                errorMessage = "Unsupported stream event."
+            }
+        };
+
+        return System.Text.Json.JsonSerializer.Serialize(payload, StreamJsonOptions);
+    }
+
+    private async Task WriteStreamLineAsync(string chunk, CancellationToken cancellationToken)
+    {
+        var bytes = Encoding.UTF8.GetBytes(chunk);
+        await Response.Body.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
         await Response.Body.WriteAsync(Encoding.UTF8.GetBytes("\n"), cancellationToken).ConfigureAwait(false);
         await Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
     }

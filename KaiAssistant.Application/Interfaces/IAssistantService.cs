@@ -1,19 +1,11 @@
-using KaiAssistant.Domain.Entities;
 using KaiAssistant.Application.Diagnostics;
-
+using KaiAssistant.Domain.Entities;
 namespace KaiAssistant.Application.Interfaces;
-
 public interface IAssistantService
 {
-    Task<AiResponse> AskQuestionAsync(
+    IAsyncEnumerable<AiStreamChunk> StreamAsync(
         string question,
         ConversationMessage[]? history = null,
         AssistantContext? context = null,
         CancellationToken cancellationToken = default);
-
-    IAsyncEnumerable<AiStreamChunk> StreamQuestionAsync(
-        string question,
-        ConversationMessage[]? history = null,
-        AssistantContext? context = null,
-        CancellationToken cancellationToken = default);
-}
+}

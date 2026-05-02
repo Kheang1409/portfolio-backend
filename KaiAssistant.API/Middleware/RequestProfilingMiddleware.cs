@@ -1,15 +1,12 @@
 using System.Diagnostics;
 using KaiAssistant.API.Options;
 using Microsoft.Extensions.Options;
-
 namespace KaiAssistant.API.Middleware;
-
 public sealed class RequestProfilingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly OpsOptions _options;
     private readonly ILogger<RequestProfilingMiddleware> _logger;
-
     public RequestProfilingMiddleware(
         RequestDelegate next,
         IOptions<OpsOptions> options,
@@ -19,13 +16,11 @@ public sealed class RequestProfilingMiddleware
         _options = options.Value;
         _logger = logger;
     }
-
     public async Task InvokeAsync(HttpContext context)
     {
         var sw = Stopwatch.StartNew();
         await _next(context).ConfigureAwait(false);
         sw.Stop();
-
         var thresholdMs = Math.Max(1, _options.SlowRequestThresholdMs);
         var path = context.Request.Path.Value ?? string.Empty;
         var isHighVolume = _options.HighVolumePathPrefixes.Any(prefix =>
@@ -39,7 +34,6 @@ public sealed class RequestProfilingMiddleware
                 return;
             }
         }
-
         if (sw.ElapsedMilliseconds >= thresholdMs)
         {
             _logger.LogWarning(
@@ -51,4 +45,4 @@ public sealed class RequestProfilingMiddleware
                 context.Request.ContentLength ?? 0);
         }
     }
-}
+}

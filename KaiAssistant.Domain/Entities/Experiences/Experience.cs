@@ -1,5 +1,4 @@
 namespace KaiAssistant.Domain.Entities.Experiences;
-
 public class Experience
 {
     public string Role { get; internal set; } = string.Empty;
@@ -8,9 +7,7 @@ public class Experience
     public DateTime? StartDates { get; internal set; }
     public DateTime? EndDate { get; internal set; }
     public List<string> BulletPoints { get; internal set; } = new();
-
     public Experience() { }
-
     public static Experience Create(string role, string company, string? location = null, 
         DateTime? startDate = null, DateTime? endDate = null, IEnumerable<string>? bulletPoints = null)
     {
@@ -24,10 +21,9 @@ public class Experience
             BulletPoints = bulletPoints != null ? new List<string>(bulletPoints) : new()
         };
     }
-
     public void AddBulletPoint(string point)
     {
         if (!string.IsNullOrWhiteSpace(point))
             BulletPoints.Add(point);
     }
-}
+}

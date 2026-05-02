@@ -11,9 +11,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
-
 namespace KaiAssistant.Tests;
-
 public class AiTrafficSimulationServiceTests
 {
     [Fact]
@@ -48,13 +46,11 @@ public class AiTrafficSimulationServiceTests
                 }
             ]
         };
-
         var monitor = BuildOptions(options);
         var gemini = Options.Create(new GeminiSettings
         {
             ModelNames = ["fast-cheap", "smart-expensive"]
         });
-
         using var provider = new ServiceCollection().BuildServiceProvider();
         var health = new ModelHealthService(monitor.Object, provider, NullLogger<ModelHealthService>.Instance);
         using var memory = new MemoryCache(new MemoryCacheOptions());
@@ -65,24 +61,19 @@ public class AiTrafficSimulationServiceTests
             memory,
             new AiTuningState(),
             new AiDecisionAuditStore());
-
         var simulator = new AiTrafficSimulationService(orchestrator, health, monitor.Object, NullLogger<AiTrafficSimulationService>.Instance);
         var report = await simulator.RunOnceAsync(90, default);
-
         report.RequestCount.Should().Be(90);
         report.SuccessCount.Should().BeGreaterThan(0);
         report.FailureCount.Should().BeGreaterThan(0);
         report.AverageDecisionLatencyMs.Should().BeGreaterThan(0);
         report.ThroughputRequestsPerSecond.Should().BeGreaterThan(0);
-
         var snapshots = simulator.GetSnapshots(50);
         snapshots.Should().NotBeEmpty();
-
         var afterSnapshot = health.GetSnapshot(DateTimeOffset.UtcNow);
         afterSnapshot.Models.Should().NotBeEmpty();
         afterSnapshot.Models.Sum(x => x.TotalInputTokens).Should().BeGreaterThan(0);
     }
-
     private static Mock<IOptionsMonitor<AiModelOrchestrationOptions>> BuildOptions(AiModelOrchestrationOptions value)
     {
         var monitor = new Mock<IOptionsMonitor<AiModelOrchestrationOptions>>();
@@ -90,4 +81,4 @@ public class AiTrafficSimulationServiceTests
         monitor.Setup(x => x.Get(It.IsAny<string>())).Returns(value);
         return monitor;
     }
-}
+}

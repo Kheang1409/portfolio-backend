@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Diagnostics;
-
 public sealed class AiModelHealthSnapshot
 {
     public DateTimeOffset CapturedAtUtc { get; set; } = DateTimeOffset.UtcNow;
@@ -7,7 +6,6 @@ public sealed class AiModelHealthSnapshot
     public long StateVersion { get; set; }
     public IReadOnlyList<AiModelHealthStatus> Models { get; set; } = Array.Empty<AiModelHealthStatus>();
 }
-
 public sealed class AiModelHealthStatus
 {
     public string ModelName { get; set; } = string.Empty;
@@ -28,4 +26,4 @@ public sealed class AiModelHealthStatus
     public long TotalOutputTokens { get; set; }
     public decimal TotalEstimatedCostUsd { get; set; }
     public DateTimeOffset? CircuitOpenUntilUtc { get; set; }
-}
+}

@@ -1,29 +1,36 @@
 using System.Reflection;
 using MongoDB.Bson.Serialization;
 using KaiAssistant.Domain.Entities.Experiences;
-
 namespace KaiAssistant.Infrastructure.Mongo;
-
 public static class MongoClassMapRegistrar
 {
+    private static readonly object Sync = new();
     public static void RegisterClassMaps()
     {
-        if (!BsonClassMap.IsClassMapRegistered(typeof(Experience)))
+        lock (Sync)
         {
-            BsonClassMap.RegisterClassMap<Experience>(cm =>
+            if (BsonClassMap.IsClassMapRegistered(typeof(Experience)))
             {
-                cm.AutoMap();
-
-                cm.MapMember(x => x.BulletPoints).SetElementName("BulletPoints");
-
-                var field = typeof(Experience).GetField("_bulletPoints", BindingFlags.NonPublic | BindingFlags.Instance);
-                if (field != null)
+                return;
+            }
+            try
+            {
+                BsonClassMap.RegisterClassMap<Experience>(cm =>
                 {
-                    cm.MapField(field.Name).SetElementName("BulletPoints");
-                }
-
-                cm.SetIgnoreExtraElements(true);
-            });
+                    cm.AutoMap();
+                    cm.MapMember(x => x.BulletPoints).SetElementName("BulletPoints");
+                    var field = typeof(Experience).GetField("_bulletPoints", BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (field != null)
+                    {
+                        cm.MapField(field.Name).SetElementName("BulletPoints");
+                    }
+                    cm.SetIgnoreExtraElements(true);
+                });
+            }
+            catch (ArgumentException)
+            {
+                // Class map already registered by another thread.
+            }
         }
     }
-}
+}

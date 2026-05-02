@@ -3,17 +3,13 @@ using KaiAssistant.Infrastructure.Cache;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-
 namespace KaiAssistant.Infrastructure.HostedServices;
-
 public sealed class ResumeCacheWarmupHostedService : IHostedService
 {
     private const string WarmupLockKey = "startup:warmup:resume:lock";
-
     private readonly IResumeRepository _resumeRepository;
     private readonly IRedisConnectionFactory _redisFactory;
     private readonly ILogger<ResumeCacheWarmupHostedService> _logger;
-
     public ResumeCacheWarmupHostedService(
         IResumeRepository resumeRepository,
         IRedisConnectionFactory redisFactory,
@@ -23,7 +19,6 @@ public sealed class ResumeCacheWarmupHostedService : IHostedService
         _redisFactory = redisFactory;
         _logger = logger;
     }
-
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         try
@@ -42,7 +37,6 @@ public sealed class ResumeCacheWarmupHostedService : IHostedService
                     return;
                 }
             }
-
             await _resumeRepository.GetLatestAsync(cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("Resume cache warmup completed.");
         }
@@ -51,6 +45,5 @@ public sealed class ResumeCacheWarmupHostedService : IHostedService
             _logger.LogWarning(ex, "Resume cache warmup failed.");
         }
     }
-
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}
+}

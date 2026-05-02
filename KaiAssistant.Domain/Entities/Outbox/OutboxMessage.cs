@@ -1,14 +1,11 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
-
 namespace KaiAssistant.Domain.Entities.Outbox;
-
 public class OutboxMessage
 {
     [BsonId]
     [BsonRepresentation(BsonType.ObjectId)]
     public string? Id { get; set; }
-
     [BsonGuidRepresentation(GuidRepresentation.Standard)]
     public Guid EventId { get; set; }
     public string EventType { get; set; } = string.Empty;
@@ -23,4 +20,4 @@ public class OutboxMessage
     public string? TraceState { get; set; }
     public string? LockedBy { get; set; }
     public DateTimeOffset? LockExpiresAtUtc { get; set; }
-}
+}

@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Interfaces;
-
 public interface ICacheDiagnosticsService
 {
     long HitCount { get; }
@@ -9,4 +8,4 @@ public interface ICacheDiagnosticsService
     double AverageLockWaitMs { get; }
     bool IsRedisConnected { get; }
     Task<long?> GetKeyCountAsync(CancellationToken cancellationToken = default);
-}
+}

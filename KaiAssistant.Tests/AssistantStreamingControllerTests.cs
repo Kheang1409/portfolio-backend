@@ -13,88 +13,75 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
-
 namespace KaiAssistant.Tests;
-
 #nullable enable
-
 public class AssistantStreamingControllerTests
 {
     [Fact]
     public async Task Stream_WhenEnabled_WritesNdjsonChunks()
     {
-        var mediator = new Mock<IMediator>();
-        var flags = new Mock<IFeatureFlagService>();
-        var assistant = new Mock<IAssistantService>();
-
-        flags.SetupGet(x => x.EnableStreaming).Returns(true);
-        assistant
-            .Setup(x => x.StreamQuestionAsync(It.IsAny<string>(), It.IsAny<KaiAssistant.Domain.Entities.ConversationMessage[]?>(), It.IsAny<KaiAssistant.Domain.Entities.AssistantContext?>(), It.IsAny<CancellationToken>()))
+        var orchestrator = new Mock<IAssistantOrchestrator>();
+        var conversationRepo = new Mock<IConversationRepository>();
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger<AssistantController>>();
+        orchestrator
+            .Setup(x => x.OrchestrateStreamAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Returns(CreateStreamChunks());
-
-        var controller = new AssistantController(mediator.Object, flags.Object, assistant.Object);
+        conversationRepo
+            .Setup(x => x.GetByUserIdAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<KaiAssistant.Domain.Entities.Conversation>());
+        conversationRepo
+            .Setup(x => x.CreateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new KaiAssistant.Domain.Entities.Conversation { UserId = "test-user" });
+        var controller = new AssistantController(orchestrator.Object, logger.Object, conversationRepo.Object);
         var httpContext = new DefaultHttpContext();
         httpContext.Response.Body = new MemoryStream();
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
-
-        await controller.Stream(new TextDto("hello"), CancellationToken.None);
-
+        await controller.Stream(new AssistantRequestDto("hello"), CancellationToken.None);
         httpContext.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
         httpContext.Response.ContentType.Should().Be("application/x-ndjson");
-
         httpContext.Response.Body.Position = 0;
         var body = await new StreamReader(httpContext.Response.Body).ReadToEndAsync();
         body.Should().Contain("\"type\":\"delta\"");
         body.Should().Contain("\"type\":\"completed\"");
     }
-
     [Fact]
     public async Task Stream_WhenCancelled_DoesNotThrow()
     {
-        var mediator = new Mock<IMediator>();
-        var flags = new Mock<IFeatureFlagService>();
-        var assistant = new Mock<IAssistantService>();
-
-        flags.SetupGet(x => x.EnableStreaming).Returns(true);
-        assistant
-            .Setup(x => x.StreamQuestionAsync(It.IsAny<string>(), It.IsAny<KaiAssistant.Domain.Entities.ConversationMessage[]?>(), It.IsAny<KaiAssistant.Domain.Entities.AssistantContext?>(), It.IsAny<CancellationToken>()))
+        var orchestrator = new Mock<IAssistantOrchestrator>();
+        var conversationRepo = new Mock<IConversationRepository>();
+        var logger = new Mock<Microsoft.Extensions.Logging.ILogger<AssistantController>>();
+        orchestrator
+            .Setup(x => x.OrchestrateStreamAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Returns(CancelledStream());
-
-        var controller = new AssistantController(mediator.Object, flags.Object, assistant.Object);
+        conversationRepo
+            .Setup(x => x.GetByUserIdAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<KaiAssistant.Domain.Entities.Conversation>());
+        conversationRepo
+            .Setup(x => x.CreateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new KaiAssistant.Domain.Entities.Conversation { UserId = "test-user" });
+        var controller = new AssistantController(orchestrator.Object, logger.Object, conversationRepo.Object);
         var httpContext = new DefaultHttpContext();
         httpContext.Response.Body = new MemoryStream();
         controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
-
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-
-        var act = async () => await controller.Stream(new TextDto("cancel"), cts.Token);
+        var act = async () => await controller.Stream(new AssistantRequestDto("cancel"), cts.Token);
         await act.Should().NotThrowAsync();
     }
-
-    private static async IAsyncEnumerable<AiStreamChunk> CreateStreamChunks()
+    private static async IAsyncEnumerable<AssistantStreamEvent> CreateStreamChunks()
     {
-        yield return new AiStreamChunk
+        yield return new AssistantStreamEvent
         {
-            Type = "delta",
-            MessageId = "m1",
-            Text = "Hello",
-            ModelUsed = "gemini-2.5-flash:generateContent"
+            Type = StreamEventType.Token,
+            Content = "Hello"
         };
-
         await Task.Yield();
-
-        yield return new AiStreamChunk
+        yield return new AssistantStreamEvent
         {
-            Type = "completed",
-            MessageId = "m1",
-            LatencyMs = 120,
-            TtftMs = 30,
-            ThroughputTokensPerSecond = 12.5
+            Type = StreamEventType.End
         };
     }
-
-    private static async IAsyncEnumerable<AiStreamChunk> CancelledStream()
+    private static async IAsyncEnumerable<AssistantStreamEvent> CancelledStream()
     {
         await Task.Delay(1);
         throw new OperationCanceledException();

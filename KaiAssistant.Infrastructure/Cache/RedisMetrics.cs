@@ -1,7 +1,5 @@
 using System.Diagnostics.Metrics;
-
 namespace KaiAssistant.Infrastructure.Cache;
-
 public static class RedisMetrics
 {
     private static readonly Meter Meter = new("KaiAssistant.Redis", "1.0.0");
@@ -12,24 +10,20 @@ public static class RedisMetrics
     private static readonly ObservableGauge<int> RedisConnected = Meter.CreateObservableGauge(
         "redis_connected",
         () => new Measurement<int>(Volatile.Read(ref _connected)));
-
     public static void SetConnected(bool connected)
     {
         Interlocked.Exchange(ref _connected, connected ? 1 : 0);
     }
-
     public static void RecordFailure(string operation)
     {
         RedisFailuresTotal.Add(1, KeyValuePair.Create<string, object?>("operation", operation));
     }
-
     public static void RecordLatency(double milliseconds, string operation)
     {
         RedisLatencyMs.Record(Math.Max(0, milliseconds), KeyValuePair.Create<string, object?>("operation", operation));
     }
-
     public static void RecordFallback(string operation)
     {
         RedisFallbackUsageCount.Add(1, KeyValuePair.Create<string, object?>("operation", operation));
     }
-}
+}

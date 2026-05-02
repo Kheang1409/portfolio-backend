@@ -1,14 +1,11 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
-
 namespace KaiAssistant.Domain.Entities.Visitors;
-
 public class VisitorEvent
 {
     [BsonId]
     [BsonRepresentation(BsonType.ObjectId)]
     public string? Id { get; set; } = ObjectId.GenerateNewId().ToString();
-
     public DateTimeOffset VisitedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public string SessionId { get; set; } = string.Empty;
     public string Path { get; set; } = "/";
@@ -26,4 +23,5 @@ public class VisitorEvent
     public string? Platform { get; set; }
     public string? NetworkType { get; set; }
     public string? IpAddress { get; set; }
-}
+    public bool IsUniqueVisit { get; set; }
+}

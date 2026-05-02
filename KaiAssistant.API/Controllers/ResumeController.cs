@@ -4,20 +4,16 @@ using KaiAssistant.Application.Resumes.Commands;
 using MediatR;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.AspNetCore.Mvc;
-
 namespace KaiAssistant.API.Controllers;
-
 [ApiController]
 [Route("api/resumes")]
 public class ResumeController : ControllerBase
 {
     private readonly IMediator _mediator;
-
     public ResumeController(IMediator mediator)
     {
         _mediator = mediator;
     }
-
     [HttpGet("latest")]
     [OutputCache(Duration = 30)]
     public async Task<IActionResult> GetLatest(CancellationToken cancellationToken)
@@ -26,7 +22,6 @@ public class ResumeController : ControllerBase
         if (resume == null) return NotFound();
         return Ok(resume);
     }
-
     [HttpGet("{id}")]
     [OutputCache(Duration = 60)]
     public async Task<IActionResult> GetById(string id, CancellationToken cancellationToken)
@@ -35,7 +30,6 @@ public class ResumeController : ControllerBase
         if (resume == null) return NotFound();
         return Ok(resume);
     }
-
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] Resume resume, CancellationToken cancellationToken)
     {
@@ -43,4 +37,4 @@ public class ResumeController : ControllerBase
         var created = await _mediator.Send(new CreateResumeCommand(resume), cancellationToken).ConfigureAwait(false);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
-}
+}

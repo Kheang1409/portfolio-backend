@@ -1,14 +1,11 @@
 using KaiAssistant.Application.Diagnostics;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
-
 namespace KaiAssistant.Infrastructure.AI;
-
 public sealed class AiTuningState : IAiTuningState
 {
     private readonly object _sync = new();
     private AiTuningWeightsSnapshot? _current;
-
     public AiTuningWeightsSnapshot GetCurrent(AiModelOrchestrationOptions baseline)
     {
         lock (_sync)
@@ -28,7 +25,6 @@ public sealed class AiTuningState : IAiTuningState
                     Reason = "baseline"
                 };
             }
-
             return new AiTuningWeightsSnapshot
             {
                 UpdatedAtUtc = _current.UpdatedAtUtc,
@@ -43,7 +39,6 @@ public sealed class AiTuningState : IAiTuningState
             };
         }
     }
-
     public void Update(AiTuningWeightsSnapshot snapshot)
     {
         lock (_sync)
@@ -62,4 +57,4 @@ public sealed class AiTuningState : IAiTuningState
             };
         }
     }
-}
+}

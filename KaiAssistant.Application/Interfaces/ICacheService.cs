@@ -1,5 +1,4 @@
 namespace KaiAssistant.Application.Interfaces;
-
 public interface ICacheService
 {
     Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default);
@@ -10,4 +9,4 @@ public interface ICacheService
         Func<CancellationToken, Task<T>> factory,
         TimeSpan ttl,
         CancellationToken cancellationToken = default);
-}
+}

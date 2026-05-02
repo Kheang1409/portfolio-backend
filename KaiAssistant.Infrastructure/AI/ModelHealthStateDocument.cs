@@ -1,14 +1,11 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
-
 namespace KaiAssistant.Infrastructure.AI;
-
 public sealed class ModelHealthStateDocument
 {
     [BsonId]
     [BsonRepresentation(BsonType.ObjectId)]
     public string? Id { get; set; }
-
     public string ModelName { get; set; } = string.Empty;
     public DateTimeOffset? LastSuccessAtUtc { get; set; }
     public DateTimeOffset? LastFailureAtUtc { get; set; }
@@ -36,4 +33,4 @@ public sealed class ModelHealthStateDocument
     public long StateVersion { get; set; }
     public bool IsActive { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
-}
+}
