@@ -28,3 +28,7 @@
 - Enable Redis and RabbitMQ in production to avoid single-node fallbacks.
 - Tune endpoint-specific rate limits by traffic profile.
 - Increase outbox partitions and consumers for high event throughput.
+
+## Ingestion workers
+
+`DocumentIngestionWorker` claims durable Mongo jobs with an owner-specific lease and admits no more than `RagIngestion:MaxConcurrency` active jobs per instance. Multiple instances can run concurrently because claiming is an atomic conditional update. Active leases are renewed conditionally; expired leases are recoverable by another worker. Shutdown stops new claims and awaits admitted tasks.

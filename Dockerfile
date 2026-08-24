@@ -8,6 +8,8 @@ COPY KaiAssistant.API/*.csproj ./KaiAssistant.API/
 COPY KaiAssistant.Application/*.csproj ./KaiAssistant.Application/
 COPY KaiAssistant.Domain/*.csproj ./KaiAssistant.Domain/
 COPY KaiAssistant.Infrastructure/*.csproj ./KaiAssistant.Infrastructure/
+COPY KaiAssistant.Tests/*.csproj ./KaiAssistant.Tests/
+COPY KaiAssistant.RagEvaluation/*.csproj ./KaiAssistant.RagEvaluation/
 
 # Restore NuGet packages
 RUN dotnet restore ./KaiAssistant.sln
@@ -22,10 +24,14 @@ RUN dotnet publish ./KaiAssistant.API/KaiAssistant.API.csproj -c Release -o /app
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
+
 # Copy published app from build stage
 COPY --from=build /app/publish .
 
 EXPOSE 8080
+
+USER appuser
 
 # Start the app
 ENTRYPOINT ["dotnet", "KaiAssistant.API.dll"]

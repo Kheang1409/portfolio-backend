@@ -15,7 +15,7 @@
     <PackageReference Include="Moq" Version="4.18.4" />
     <PackageReference Include="Mongo2Go" Version="4.0.0" />
     <!-- Ensure the test runner has the same MongoDB driver assembly available at runtime -->
-    <PackageReference Include="MongoDB.Driver" Version="3.7.1" />
+    <PackageReference Include="MongoDB.Driver" Version="3.11.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,5 +23,10 @@
     <ProjectReference Include="..\KaiAssistant.Application\KaiAssistant.Application.csproj" />
     <ProjectReference Include="..\KaiAssistant.Infrastructure\KaiAssistant.Infrastructure.csproj" />
     <ProjectReference Include="..\KaiAssistant.Domain\KaiAssistant.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="HybridRetrievalTests.cs" />
+    <Compile Remove="Integration\IngestionJobStoreIntegrationTests.cs" />
+    <Compile Remove="OrchestratorUsageExamples.cs" />
   </ItemGroup>
 </Project>

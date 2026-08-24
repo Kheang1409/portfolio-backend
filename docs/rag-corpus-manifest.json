@@ -1,0 +1,42 @@
+[
+  {
+    "id": "professional-summary",
+    "path": "docs/rag-corpus/professional-summary.md",
+    "title": "Professional Summary",
+    "source": "portfolio/about",
+    "documentType": "profile",
+    "version": "2026-08",
+    "tags": ["summary", "backend", "cloud", "architecture"],
+    "enabled": true
+  },
+  {
+    "id": "professional-experience",
+    "path": "docs/rag-corpus/professional-experience.md",
+    "title": "Professional Experience",
+    "source": "portfolio/experience",
+    "documentType": "experience",
+    "version": "2026-08",
+    "tags": ["experience", "finance", "erp", "pos", "microservices"],
+    "enabled": true
+  },
+  {
+    "id": "skills-and-education",
+    "path": "docs/rag-corpus/skills-and-education.md",
+    "title": "Skills, Education, and Certifications",
+    "source": "portfolio/skills-education",
+    "documentType": "skills",
+    "version": "2026-08",
+    "tags": ["skills", "technology", "security", "education"],
+    "enabled": true
+  },
+  {
+    "id": "projects-and-architecture",
+    "path": "docs/rag-corpus/projects-and-architecture.md",
+    "title": "Projects and Architecture",
+    "source": "portfolio/projects",
+    "documentType": "projects",
+    "version": "2026-08",
+    "tags": ["projects", "architecture", "reliability", "observability"],
+    "enabled": true
+  }
+]

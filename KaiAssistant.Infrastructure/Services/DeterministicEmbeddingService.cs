@@ -5,11 +5,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-public sealed class DeterministicEmbeddingService : IEmbeddingService
+public sealed class DeterministicTestEmbeddingService : IEmbeddingService
 {
     private const int DimensionSize = 384;
-    private readonly ILogger<DeterministicEmbeddingService> _logger;
-    public DeterministicEmbeddingService(ILogger<DeterministicEmbeddingService> logger)
+    private readonly ILogger<DeterministicTestEmbeddingService> _logger;
+    public DeterministicTestEmbeddingService(ILogger<DeterministicTestEmbeddingService> logger)
     {
         _logger = logger;
     }
@@ -18,6 +18,7 @@ public sealed class DeterministicEmbeddingService : IEmbeddingService
         var embedding = GenerateEmbedding(text);
         return Task.FromResult(embedding);
     }
+    public Task<float[]> GenerateEmbeddingAsync(string text, EmbeddingPurpose purpose, string? title = null, CancellationToken cancellationToken = default) => GenerateEmbeddingAsync(text, cancellationToken);
     private float[] GenerateEmbedding(string text)
     {
         if (string.IsNullOrEmpty(text))
@@ -45,4 +46,4 @@ public sealed class DeterministicEmbeddingService : IEmbeddingService
         }
         return embedding;
     }
-}
+}

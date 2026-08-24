@@ -20,10 +20,10 @@ public static class AdvancedPlatformExtensions
         services.AddScoped<GetResumeTool>();
         services.AddScoped<GetSystemStatusTool>();
         // ========== PART 2: SEMANTIC SEARCH & RAG ==========
-        // Embedding service (production should use real embeddings)
+        // Offline fallback for hosts that intentionally do not register production infrastructure.
         if (!services.Any(x => x.ServiceType == typeof(IEmbeddingService)))
         {
-            services.AddSingleton<IEmbeddingService, DeterministicEmbeddingService>();
+            services.AddSingleton<IEmbeddingService, DeterministicTestEmbeddingService>();
         }
         // Semantic search service
         services.AddScoped<ISemanticSearchService, InMemorySemanticSearchService>();
@@ -78,4 +78,4 @@ public static class ProgramIntegrationExample
         // Add Gemini with resilience
         // services.AddGeminiWithResilience(config);
     }
-}
+}

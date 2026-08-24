@@ -23,9 +23,9 @@ public class RateLimitingMiddleware
             WINDOW)
             .ConfigureAwait(false);
         // Set rate limit headers
-        context.Response.Headers.Add("X-RateLimit-Limit", MAX_REQUESTS.ToString());
-        context.Response.Headers.Add("X-RateLimit-Remaining", remaining.ToString());
-        context.Response.Headers.Add("X-RateLimit-Reset", resetAt.ToUnixTimeSeconds().ToString());
+        context.Response.Headers["X-RateLimit-Limit"] = MAX_REQUESTS.ToString();
+        context.Response.Headers["X-RateLimit-Remaining"] = remaining.ToString();
+        context.Response.Headers["X-RateLimit-Reset"] = resetAt.ToUnixTimeSeconds().ToString();
         if (!isAllowed)
         {
                 logger.LogWarning("Rate limit exceeded: Identifier={Identifier}, ResetAt={ResetAt}", identifier, resetAt);
@@ -55,4 +55,4 @@ public static class RateLimitingMiddlewareExtensions
     {
         return builder.UseMiddleware<RateLimitingMiddleware>();
     }
-}
+}

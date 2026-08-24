@@ -17,10 +17,13 @@ public class EmailSettings
         string senderPassword,
         bool enabled = true)
     {
-        Guard.AgainstNullOrWhiteSpace(smtpServer, nameof(smtpServer));
-        Guard.AgainstOutOfRange(port, 1, 65535, nameof(port));
-        Guard.AgainstNullOrWhiteSpace(senderEmail, nameof(senderEmail));
-        Guard.AgainstNullOrWhiteSpace(recieverEmail, nameof(recieverEmail));
+        if (enabled)
+        {
+            Guard.AgainstNullOrWhiteSpace(smtpServer, nameof(smtpServer));
+            Guard.AgainstOutOfRange(port, 1, 65535, nameof(port));
+            Guard.AgainstNullOrWhiteSpace(senderEmail, nameof(senderEmail));
+            Guard.AgainstNullOrWhiteSpace(recieverEmail, nameof(recieverEmail));
+        }
         SmtpServer = smtpServer;
         Port = port;
         SenderEmail = senderEmail;

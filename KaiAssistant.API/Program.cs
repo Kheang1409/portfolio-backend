@@ -8,14 +8,10 @@ using KaiAssistant.API.Services;
 using KaiAssistant.Application.Extensions;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
-using KaiAssistant.Infrastructure.FeatureFlags;
-using KaiAssistant.Infrastructure.EventBus;
 using KaiAssistant.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -38,8 +34,7 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tb =>
     {
         tb.AddAspNetCoreInstrumentation()
-                    .AddHttpClientInstrumentation()
-                    .AddSource("KaiAssistant.OutboxProcessor");
+                    .AddHttpClientInstrumentation();
         if (builder.Environment.IsDevelopment())
         {
             tb.AddConsoleExporter();
@@ -54,14 +49,12 @@ builder.Services.AddOpenTelemetry()
         .AddMeter("KaiAssistant.AssistantService")
         .AddMeter("KaiAssistant.Cache")
         .AddMeter("KaiAssistant.Resume")
-        .AddMeter("KaiAssistant.Outbox")
         .AddMeter("KaiAssistant.AiGovernance")
-        .AddMeter("KaiAssistant.OutboxProcessor")
         .AddMeter("KaiAssistant.ApiEndpoints")
         .AddMeter("KaiAssistant.RateLimiting")
-        .AddMeter("KaiAssistant.AiModels")
         .AddMeter("KaiAssistant.Redis")
-        .AddMeter("KaiAssistant.AiOrchestrator")
+        .AddMeter("KaiAssistant.Rag")
+        .AddMeter("KaiAssistant.Embeddings")
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation());
 builder.Services.AddApplicationServices();
@@ -90,24 +83,12 @@ builder.Services.AddOptions<OpsOptions>()
     .Bind(builder.Configuration.GetSection(OpsOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.Services.AddOptions<OutboxRecoveryOptions>()
-    .Bind(builder.Configuration.GetSection(OutboxRecoveryOptions.SectionName))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
 builder.Services.AddOptions<AiGovernanceOptions>()
     .Bind(builder.Configuration.GetSection(AiGovernanceOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<AiStreamingOptions>()
     .Bind(builder.Configuration.GetSection(AiStreamingOptions.SectionName))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-builder.Services.AddOptions<AiModelOrchestrationOptions>()
-    .Bind(builder.Configuration.GetSection(AiModelOrchestrationOptions.SectionName))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-builder.Services.AddOptions<AiOrchestrationOptions>()
-    .Bind(builder.Configuration.GetSection(AiOrchestrationOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<SemanticCacheOptions>()
@@ -118,16 +99,13 @@ builder.Services.AddOptions<RagOptions>()
     .Bind(builder.Configuration.GetSection(RagOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+builder.Services.AddOptions<EmbeddingOptions>()
+    .Bind(builder.Configuration.GetSection(EmbeddingOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(options => options.Provider.Equals("gemini", StringComparison.OrdinalIgnoreCase), "Only the Gemini production embedding provider is supported.")
+    .ValidateOnStart();
 builder.Services.AddOptions<ConversationOptions>()
     .Bind(builder.Configuration.GetSection(ConversationOptions.SectionName))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-builder.Services.AddOptions<FeatureFlagStoreOptions>()
-    .Bind(builder.Configuration.GetSection(FeatureFlagStoreOptions.SectionName))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-builder.Services.AddOptions<AiEvaluationOptions>()
-    .Bind(builder.Configuration.GetSection(AiEvaluationOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddOptions<OpsSecurityOptions>()
@@ -144,8 +122,6 @@ builder.Services.AddSingleton<IOperationalSimulationState, OperationalSimulation
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddCheck<MongoDbHealthCheck>("mongodb", tags: ["ready"])
-    .AddCheck<RedisHealthCheck>("redis", tags: ["ready"])
-    .AddCheck<RabbitMqHealthCheck>("rabbitmq", tags: ["ready"])
     .AddCheck<AiProviderHealthCheck>("ai-provider", tags: ["ready"]);
 builder.Services.AddSingleton<IExceptionHandler, ArgumentExceptionHandler>();
 builder.Services.AddSingleton<IExceptionHandler, UnauthorizedAccessExceptionHandler>();
@@ -162,22 +138,6 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
         options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.WriteIndented = false;
-    });
-builder.Services.AddAuthorization();
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        var securityOptions = builder.Configuration.GetSection(OpsSecurityOptions.SectionName).Get<OpsSecurityOptions>() ?? new OpsSecurityOptions();
-        options.Authority = securityOptions.JwtAuthority;
-        options.Audience = securityOptions.JwtAudience;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = !string.IsNullOrWhiteSpace(securityOptions.JwtAuthority),
-            ValidateAudience = !string.IsNullOrWhiteSpace(securityOptions.JwtAudience),
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true
-        };
     });
 var app = builder.Build();
 if (app.Environment.IsDevelopment())
@@ -206,8 +166,6 @@ if (httpsUrlConfigured)
 {
     app.UseHttpsRedirection();
 }
-app.UseAuthentication();
-app.UseAuthorization();
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
@@ -250,29 +208,6 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
     {
         throw new InvalidOperationException("MongoDB configuration is required in production.");
     }
-    var flags = configuration.GetSection(FeatureFlagsOptions.SectionName).Get<FeatureFlagsOptions>() ?? new FeatureFlagsOptions();
-    if (flags.EnableCache)
-    {
-        var redisConn = FirstNonEmpty(
-            Environment.GetEnvironmentVariable("REDIS__CONNECTIONSTRING"),
-            configuration["Redis:ConnectionString"]);
-        if (string.IsNullOrWhiteSpace(redisConn))
-        {
-            throw new InvalidOperationException("Redis configuration is required when cache feature is enabled in production.");
-        }
-        if (!redisConn.StartsWith("rediss://", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("Redis connection must use rediss:// in production.");
-        }
-    }
-    if (flags.EnableRabbitMqPublishing)
-    {
-        var rabbit = configuration.GetSection(RabbitMqOptions.SectionName).Get<RabbitMqOptions>() ?? new RabbitMqOptions();
-        if (!rabbit.Enabled || string.IsNullOrWhiteSpace(rabbit.HostName) || string.IsNullOrWhiteSpace(rabbit.ExchangeName))
-        {
-            throw new InvalidOperationException("RabbitMQ configuration is invalid for production publishing.");
-        }
-    }
     var aiGovernance = configuration.GetSection(AiGovernanceOptions.SectionName).Get<AiGovernanceOptions>() ?? new AiGovernanceOptions();
     if (aiGovernance.Enabled)
     {
@@ -283,13 +218,6 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
     }
     static string? FirstNonEmpty(params string?[] candidates)
     {
-        foreach (var candidate in candidates)
-        {
-            if (!string.IsNullOrWhiteSpace(candidate))
-            {
-                return candidate;
-            }
-        }
-        return null;
+        return candidates.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
     }
 }

@@ -4,10 +4,10 @@ using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
 namespace KaiAssistant.Infrastructure.AI.Caching;
-public sealed class DeterministicEmbeddingService : IEmbeddingService
+public sealed class DeterministicTestEmbeddingService : IEmbeddingService
 {
     private readonly IOptionsMonitor<SemanticCacheOptions> _options;
-    public DeterministicEmbeddingService(IOptionsMonitor<SemanticCacheOptions> options)
+    public DeterministicTestEmbeddingService(IOptionsMonitor<SemanticCacheOptions> options)
     {
         _options = options;
     }
@@ -30,6 +30,7 @@ public sealed class DeterministicEmbeddingService : IEmbeddingService
         NormalizeInPlace(vector);
         return Task.FromResult(vector);
     }
+    public Task<float[]> GenerateEmbeddingAsync(string text, EmbeddingPurpose purpose, string? title = null, CancellationToken cancellationToken = default) => GenerateEmbeddingAsync(text, cancellationToken);
     private static void NormalizeInPlace(float[] vector)
     {
         double sumSquares = 0;
@@ -47,4 +48,4 @@ public sealed class DeterministicEmbeddingService : IEmbeddingService
             vector[i] /= length;
         }
     }
-}
+}

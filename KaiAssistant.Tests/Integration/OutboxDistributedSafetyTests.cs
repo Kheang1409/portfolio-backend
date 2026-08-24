@@ -22,7 +22,7 @@ public class OutboxDistributedSafetyTests
     public async Task LeasePendingAsync_ShouldOnlyAllowSingleLeaseAcrossInstances()
     {
         EnsureMongoClassMapsRegistered();
-        using var runner = MongoDbRunner.Start();
+        using var runner = MongoTestRunner.Start();
         var client = new MongoClient(runner.ConnectionString);
         var db = client.GetDatabase("outbox_lease_test");
         var services = new ServiceCollection();
@@ -78,7 +78,7 @@ public class OutboxDistributedSafetyTests
     public async Task MarkProcessedAsync_ShouldRejectWrongLockOwner()
     {
         EnsureMongoClassMapsRegistered();
-        using var runner = MongoDbRunner.Start();
+        using var runner = MongoTestRunner.Start();
         var client = new MongoClient(runner.ConnectionString);
         var db = client.GetDatabase("outbox_lock_owner_test");
         var services = new ServiceCollection();
@@ -117,4 +117,4 @@ public class OutboxDistributedSafetyTests
             // Class maps may already be registered by another test case.
         }
     }
-}
+}

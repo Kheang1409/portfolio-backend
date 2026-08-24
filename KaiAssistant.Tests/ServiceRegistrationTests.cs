@@ -40,6 +40,8 @@ public class ServiceRegistrationTests
         var provider = services.BuildServiceProvider();
         var assistant = provider.GetService<IAssistantService>();
         assistant.Should().NotBeNull();
+        var resumeWriteService = provider.GetService<IResumeWriteService>();
+        resumeWriteService.Should().NotBeNull();
         var resumeRepo = provider.GetService<KaiAssistant.Domain.Interfaces.Repositories.IResumeRepository>();
         resumeRepo.Should().NotBeNull();
     }

@@ -28,7 +28,7 @@ public sealed class VisitsController : ControllerBase
         }
         var visitedAtUtc = DateTimeOffset.UtcNow;
         var userAgent = FirstNonEmpty(dto.UserAgent, Request.Headers.UserAgent.ToString());
-        var ipAddress = GetClientIp(Request);
+        var ipAddress = GetClientIp(Request) ?? "unknown";
         // Check deduplication: skip if refresh spam detected
         var shouldCount = await _deduplication.ShouldCountVisitAsync(
             ipAddress,
@@ -165,4 +165,4 @@ public sealed class VisitsController : ControllerBase
         public string? Platform { get; set; }
         public string? NetworkType { get; set; }
     }
-}
+}

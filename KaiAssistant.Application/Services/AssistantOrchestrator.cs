@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.DTOs;
 using KaiAssistant.Domain.Entities;
@@ -34,7 +35,7 @@ public class AssistantOrchestrator : IAssistantOrchestrator
         string userMessage,
         string conversationId,
         string? userId = null,
-        System.Threading.CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] System.Threading.CancellationToken cancellationToken = default)
     {
         var requestId = Guid.NewGuid().ToString("N")[..8];
         _activeStreamCount++;

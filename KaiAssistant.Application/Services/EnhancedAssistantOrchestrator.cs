@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 public sealed class EnhancedAssistantOrchestrator : IEnhancedAssistantOrchestrator
 {
@@ -37,7 +38,7 @@ public sealed class EnhancedAssistantOrchestrator : IEnhancedAssistantOrchestrat
         string userMessage,
         string conversationId,
         string? userId = null,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var requestId = Guid.NewGuid().ToString("N")[..8];
         var startTime = Stopwatch.StartNew();
@@ -274,4 +275,4 @@ public sealed class EnhancedAssistantOrchestrator : IEnhancedAssistantOrchestrat
         }
         return args;
     }
-}
+}

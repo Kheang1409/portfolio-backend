@@ -27,6 +27,8 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
         var modelHealthCollection = _database.GetCollection<ModelHealthStateDocument>("assistant_model_health");
         var cacheCollection = _database.GetCollection<CachedPrompt>("cached_prompts");
         var knowledgeCollection = _database.GetCollection<KnowledgeDocument>("knowledge_base_documents");
+        var knowledgeChunks = _database.GetCollection<KnowledgeChunk>("knowledge_chunks");
+        var ingestionJobs = _database.GetCollection<IngestionJob>("ingestion_jobs");
         var conversationCollection = _database.GetCollection<Conversation>("ai_conversations");
         var resumeIndexes = new[]
         {
@@ -74,8 +76,21 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
         var knowledgeIndexes = new[]
         {
             new CreateIndexModel<KnowledgeDocument>(
+                Builders<KnowledgeDocument>.IndexKeys.Ascending(x => x.ContentHash),
+                new CreateIndexOptions { Name = "ix_knowledge_content_hash", Unique = true }),
+            new CreateIndexModel<KnowledgeDocument>(
                 Builders<KnowledgeDocument>.IndexKeys.Ascending(x => x.Source),
                 new CreateIndexOptions { Name = "ix_knowledge_source" })
+        };
+        var knowledgeChunkIndexes = new[]
+        {
+            new CreateIndexModel<KnowledgeChunk>(Builders<KnowledgeChunk>.IndexKeys.Ascending(x => x.DocumentId).Ascending(x => x.ChunkIndex), new CreateIndexOptions { Name = "ix_knowledge_chunk_document" }),
+            new CreateIndexModel<KnowledgeChunk>(Builders<KnowledgeChunk>.IndexKeys.Ascending(x => x.ContentHash), new CreateIndexOptions { Name = "ix_knowledge_chunk_content_hash" })
+        };
+        var ingestionJobIndexes = new[]
+        {
+            new CreateIndexModel<IngestionJob>(Builders<IngestionJob>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.NextAttemptAtUtc), new CreateIndexOptions { Name = "ix_ingestion_job_eligible" }),
+            new CreateIndexModel<IngestionJob>(Builders<IngestionJob>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.LeaseExpiresAtUtc), new CreateIndexOptions { Name = "ix_ingestion_job_lease" })
         };
         var conversationIndexes = new[]
         {
@@ -120,11 +135,14 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
         await outboxCollection.Indexes.CreateManyAsync(outboxIndexes, cancellationToken).ConfigureAwait(false);
         await cacheCollection.Indexes.CreateManyAsync(semanticCacheIndexes, cancellationToken).ConfigureAwait(false);
         await knowledgeCollection.Indexes.CreateManyAsync(knowledgeIndexes, cancellationToken).ConfigureAwait(false);
+        await knowledgeChunks.Indexes.CreateManyAsync(knowledgeChunkIndexes, cancellationToken).ConfigureAwait(false);
+        await ingestionJobs.Indexes.CreateManyAsync(ingestionJobIndexes, cancellationToken).ConfigureAwait(false);
         await conversationCollection.Indexes.CreateManyAsync(conversationIndexes, cancellationToken).ConfigureAwait(false);
         await modelHealthCollection.Indexes.CreateManyAsync(modelHealthIndexes, cancellationToken).ConfigureAwait(false);
         await visitorCollection.Indexes.CreateManyAsync(visitorIndexes, cancellationToken).ConfigureAwait(false);
         await TryCreateVectorSearchIndexAsync("cached_prompts", "ix_cache_embedding_vector", cancellationToken).ConfigureAwait(false);
         await TryCreateVectorSearchIndexAsync("knowledge_base_documents", "ix_knowledge_embedding_vector", cancellationToken).ConfigureAwait(false);
+        await TryCreateVectorSearchIndexAsync("knowledge_chunks", "ix_knowledge_chunk_embedding_vector", cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Mongo indexes initialized.");
     }
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -167,4 +185,4 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
             _logger.LogWarning(ex, "Vector search index creation skipped for collection {Collection}.", collection);
         }
     }
-}
+}

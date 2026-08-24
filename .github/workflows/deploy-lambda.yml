@@ -38,6 +38,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Audit NuGet dependencies
+        run: dotnet list KaiAssistant.sln package --vulnerable --include-transitive
+
       - name: Build solution
         run: dotnet build KaiAssistant.sln --configuration Release --no-restore
 

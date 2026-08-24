@@ -15,9 +15,11 @@
 
 - Query is embedded via deterministic embedding service.
 - Knowledge documents are scanned and scored by cosine similarity.
-- Top-k snippets above similarity threshold are selected.
+- A deterministic selector applies evidence, chunk-count, estimated-token, and duplicate limits.
 - Prompt is augmented with concise context lines.
 - Model is asked to ground response in provided context.
+
+Retrieved material remains untrusted data. Source identity is retained through selection, and weak/no evidence leaves the original question unaugmented so the model can state that portfolio evidence is insufficient.
 
 ## Semantic Caching Logic
 

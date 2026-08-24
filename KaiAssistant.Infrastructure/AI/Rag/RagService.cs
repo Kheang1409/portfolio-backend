@@ -1,74 +1,75 @@
 using KaiAssistant.Application.AI;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
-using KaiAssistant.Domain.Entities.AI;
+using KaiAssistant.Application.Rag;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 namespace KaiAssistant.Infrastructure.AI.Rag;
 public sealed class RagService : IRagService
 {
-    private static readonly ProjectionDefinition<KnowledgeDocument, RagDocumentProjection> RagProjection =
-        Builders<KnowledgeDocument>.Projection.Expression(x => new RagDocumentProjection
-        {
-            Id = x.Id,
-            Source = x.Source,
-            Content = x.Content,
-            Embedding = x.Embedding
-        });
-    private readonly IMongoCollection<KnowledgeDocument> _collection;
-    private readonly IEmbeddingService _embeddingService;
+    private static readonly ActivitySource ActivitySource = new("KaiAssistant.Rag", "1.0.0");
+    private static readonly Meter Meter = new("KaiAssistant.Rag", "1.0.0");
+    private static readonly Histogram<double> RetrievalDuration = Meter.CreateHistogram<double>("retrieval_total_duration", "ms");
+    private static readonly Histogram<double> ContextDuration = Meter.CreateHistogram<double>("context_build_duration", "ms");
+    private static readonly Histogram<long> CandidateCount = Meter.CreateHistogram<long>("retrieval_candidate_count");
+    private static readonly Histogram<long> SelectedCount = Meter.CreateHistogram<long>("retrieval_selected_count");
+    private static readonly Counter<long> EmptyCount = Meter.CreateCounter<long>("retrieval_empty_count");
+    private readonly IHybridRetriever _retriever;
+    private readonly IRagContextSelector _contextSelector;
     private readonly IOptionsMonitor<RagOptions> _options;
-    private readonly IFeatureFlagService _featureFlags;
     private readonly ILogger<RagService> _logger;
     public RagService(
-        IMongoDatabase database,
-        IEmbeddingService embeddingService,
+        IHybridRetriever retriever,
+        IRagContextSelector contextSelector,
         IOptionsMonitor<RagOptions> options,
-        IFeatureFlagService featureFlags,
         ILogger<RagService> logger)
     {
-        _collection = database.GetCollection<KnowledgeDocument>("knowledge_base_documents");
-        _embeddingService = embeddingService;
+        _retriever = retriever;
+        _contextSelector = contextSelector;
         _options = options;
-        _featureFlags = featureFlags;
         _logger = logger;
     }
     public async Task<RagContextResult> BuildAugmentedPromptAsync(string question, CancellationToken cancellationToken = default)
     {
-        if (!_options.CurrentValue.Enabled || !_featureFlags.EnableRag)
+        if (!_options.CurrentValue.Enabled)
         {
             return new RagContextResult { AugmentedPrompt = question };
         }
-        var queryEmbedding = await _embeddingService.GenerateEmbeddingAsync(question, cancellationToken).ConfigureAwait(false);
-        var documents = await _collection
-            .Find(Builders<KnowledgeDocument>.Filter.Empty)
-            .Project(RagProjection)
-            .Limit(300)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var scored = documents
-            .Select(x => new
-            {
-                Document = x,
-                Similarity = VectorMath.CosineSimilarity(queryEmbedding, x.Embedding)
-            })
-            .Where(x => x.Similarity >= _options.CurrentValue.MinSimilarity)
-            .OrderByDescending(x => x.Similarity)
-            .Take(Math.Max(1, _options.CurrentValue.TopK))
-            .ToList();
-        if (scored.Count == 0)
+        using var activity = ActivitySource.StartActivity("rag.retrieve", ActivityKind.Internal);
+        var retrievalWatch = Stopwatch.StartNew();
+        var candidates = await _retriever.RetrieveAsync(question, cancellationToken).ConfigureAwait(false);
+        RetrievalDuration.Record(retrievalWatch.Elapsed.TotalMilliseconds);
+        CandidateCount.Record(candidates.Count);
+        var contextWatch = Stopwatch.StartNew();
+        var selected = _contextSelector.Select(candidates);
+        ContextDuration.Record(contextWatch.Elapsed.TotalMilliseconds);
+        SelectedCount.Record(selected.Count);
+        activity?.SetTag("rag.strategy", "keyword_first_semantic_fallback");
+        activity?.SetTag("rag.semantic_candidate_count", _options.CurrentValue.SemanticCandidateCount);
+        activity?.SetTag("rag.keyword_candidate_count", _options.CurrentValue.KeywordCandidateCount);
+        activity?.SetTag("rag.final_candidate_count", candidates.Count);
+        activity?.SetTag("rag.context_chunk_count", selected.Count);
+        activity?.SetTag("rag.pipeline_version", _options.CurrentValue.PipelineVersion);
+        if (selected.Count == 0)
         {
+            EmptyCount.Add(1);
             return new RagContextResult { AugmentedPrompt = question };
         }
-        _logger.LogInformation("RAG context retrieved. RetrievedSnippets={Count}", scored.Count);
-        var snippets = scored
+        _logger.LogInformation("Hybrid RAG context retrieved. RetrievedSnippets={Count}", selected.Count);
+        var snippets = selected
             .Select(x => new RagSnippet
             {
-                DocumentId = x.Document.Id ?? string.Empty,
-                Source = x.Document.Source,
-                Content = x.Document.Content,
-                Similarity = x.Similarity
+                ChunkId = x.ChunkId,
+                DocumentId = x.DocumentId,
+                Title = x.Metadata.TryGetValue("title", out var title) ? title : string.Empty,
+                Section = x.Metadata.TryGetValue("section", out var section) ? section : string.Empty,
+                Version = x.Metadata.TryGetValue("version", out var version) && int.TryParse(version, out var parsedVersion) ? parsedVersion : 1,
+                Source = x.Metadata.TryGetValue("source", out var source) ? source : string.Empty,
+                Content = x.Content,
+                Similarity = x.RerankScore > 0 ? x.RerankScore : x.FusedScore
             })
             .ToList();
         var contextLines = new List<string>(snippets.Count);
@@ -93,11 +94,4 @@ public sealed class RagService : IRagService
             Snippets = snippets
         };
     }
-    private sealed class RagDocumentProjection
-    {
-        public string? Id { get; init; }
-        public string Source { get; init; } = string.Empty;
-        public string Content { get; init; } = string.Empty;
-        public float[] Embedding { get; init; } = Array.Empty<float>();
-    }
-}
+}

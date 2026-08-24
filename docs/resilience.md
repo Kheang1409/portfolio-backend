@@ -33,3 +33,7 @@
 - Structured logs include correlation and trace context.
 - OpenTelemetry spans expose nested operation timings.
 - Dashboard-ready counters/histograms capture fallback rates, cache behavior, and outbox health.
+
+## Durable ingestion recovery
+
+Transient ingestion failures return jobs to `Queued` with exponential backoff and jitter. Jobs exceeding `MaxAttempts` become `DeadLetter` with bounded diagnostic error text. A worker crash leaves a lease that expires, allowing another instance to recover the job. One job failure is isolated from other active jobs.

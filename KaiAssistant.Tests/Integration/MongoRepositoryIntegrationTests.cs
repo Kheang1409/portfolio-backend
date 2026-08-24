@@ -15,7 +15,7 @@ public class MongoRepositoryIntegrationTests
     [Fact]
     public async Task MongoRepository_BasicCrud_Works_With_Session()
     {
-        var runner = MongoDbRunner.Start();
+        using var runner = MongoTestRunner.Start();
         var client = new MongoClient(runner.ConnectionString);
         var db = client.GetDatabase("testdb");
         var services = new ServiceCollection();
@@ -32,6 +32,5 @@ public class MongoRepositoryIntegrationTests
         await repo.InsertAsync(resume);
         var all = await repo.GetAllAsync();
         Assert.NotEmpty(all);
-        runner.Dispose();
     }
 }

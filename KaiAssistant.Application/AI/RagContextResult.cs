@@ -6,8 +6,12 @@ public sealed class RagContextResult
 }
 public sealed class RagSnippet
 {
+    public string ChunkId { get; init; } = string.Empty;
     public string DocumentId { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public string Section { get; init; } = string.Empty;
+    public int Version { get; init; } = 1;
     public string Source { get; init; } = string.Empty;
     public string Content { get; init; } = string.Empty;
     public double Similarity { get; init; }
-}
+}
