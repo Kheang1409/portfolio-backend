@@ -64,20 +64,8 @@ public class AssistantOrchestrator : IAssistantOrchestrator
                 null,
                 cancellationToken)
                 .ConfigureAwait(false);
-            // 3. Check response cache
-            var cacheKey = _responseCache.GenerateCacheKey(userMessage);
-            var cachedResponse = await _responseCache.GetCachedResponseAsync(cacheKey, cancellationToken)
-                .ConfigureAwait(false);
-            if (cachedResponse != null)
-            {
-                _logger.LogInformation("Cache hit: RequestId={RequestId}, Key={Key}", requestId, cacheKey);
-                yield return new AssistantStreamEvent { Type = StreamEventType.Start };
-                yield return new AssistantStreamEvent { Type = StreamEventType.Token, Content = cachedResponse };
-                yield return new AssistantStreamEvent { Type = StreamEventType.End };
-                yield break;
-            }
-            _logger.LogInformation("Cache miss: RequestId={RequestId}", requestId);
-            // 4. Stream from AI, collecting response
+            // Response caching happens in AssistantService after retrieval so its key includes selected evidence.
+            // 3. Stream from AI, collecting response
             var stopwatch = Stopwatch.StartNew();
             var responseBuilder = new System.Text.StringBuilder();
             var tokenCount = 0;
@@ -134,16 +122,6 @@ public class AssistantOrchestrator : IAssistantOrchestrator
                         await _conversationRepo.UpdateAsync(conversation, cancellationToken)
                             .ConfigureAwait(false);
                     }
-                }
-                // 6. Cache response
-                if (!cancellationToken.IsCancellationRequested)
-                {
-                    await _responseCache.CacheResponseAsync(
-                        cacheKey,
-                        fullResponse,
-                        TimeSpan.FromMinutes(10),
-                        cancellationToken)
-                        .ConfigureAwait(false);
                 }
             }
             if (!terminalEmitted)

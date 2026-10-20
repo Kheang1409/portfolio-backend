@@ -34,8 +34,10 @@ public sealed class TextDocumentParser : IDocumentParser
 public sealed class MongoKnowledgeDocumentStore(IMongoDatabase database) : IKnowledgeDocumentStore
 {
     private readonly IMongoCollection<KnowledgeDocument> _documents = database.GetCollection<KnowledgeDocument>("knowledge_base_documents");
-    public Task<KnowledgeDocument?> GetAsync(string id, CancellationToken ct = default) => _documents.Find(x => x.Id == id).FirstOrDefaultAsync(ct);
-    public Task<KnowledgeDocument?> FindByHashAsync(string hash, CancellationToken ct = default) => _documents.Find(x => x.ContentHash == hash).FirstOrDefaultAsync(ct);
+    public async Task<KnowledgeDocument?> GetAsync(string id, CancellationToken ct = default) =>
+        await _documents.Find(x => x.Id == id).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+    public async Task<KnowledgeDocument?> FindByHashAsync(string hash, CancellationToken ct = default) =>
+        await _documents.Find(x => x.ContentHash == hash).FirstOrDefaultAsync(ct).ConfigureAwait(false);
     public Task AddAsync(KnowledgeDocument document, CancellationToken ct = default) => _documents.InsertOneAsync(document, cancellationToken: ct);
     public Task SetStatusAsync(string id, string status, int chunkCount = 0, CancellationToken ct = default) => _documents.UpdateOneAsync(x => x.Id == id, Builders<KnowledgeDocument>.Update.Set(x => x.Status, status).Set(x => x.ChunkCount, chunkCount).Set(x => x.UpdatedAtUtc, DateTimeOffset.UtcNow), cancellationToken: ct);
 }
@@ -43,13 +45,14 @@ public sealed class MongoIngestionJobStore(IMongoDatabase database) : IIngestion
 {
     private readonly IMongoCollection<IngestionJob> _jobs = database.GetCollection<IngestionJob>("ingestion_jobs");
     public Task AddAsync(IngestionJob job, CancellationToken ct = default) => _jobs.InsertOneAsync(job, cancellationToken: ct);
-    public Task<IngestionJob?> GetAsync(string id, CancellationToken ct = default) => _jobs.Find(x => x.Id == id).FirstOrDefaultAsync(ct);
-    public Task<IngestionJob?> ClaimAsync(string worker, DateTimeOffset now, TimeSpan lease, CancellationToken ct = default)
+    public async Task<IngestionJob?> GetAsync(string id, CancellationToken ct = default) =>
+        await _jobs.Find(x => x.Id == id).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+    public async Task<IngestionJob?> ClaimAsync(string worker, DateTimeOffset now, TimeSpan lease, CancellationToken ct = default)
     {
         var eligible = (Builders<IngestionJob>.Filter.Eq(x => x.Status, IngestionJobStatus.Queued) & Builders<IngestionJob>.Filter.Lte(x => x.NextAttemptAtUtc, now)) |
             (Builders<IngestionJob>.Filter.Eq(x => x.Status, IngestionJobStatus.Processing) & Builders<IngestionJob>.Filter.Lte(x => x.LeaseExpiresAtUtc, now));
         var update = Builders<IngestionJob>.Update.Set(x => x.Status, IngestionJobStatus.Processing).Set(x => x.WorkerId, worker).Set(x => x.LeaseExpiresAtUtc, now.Add(lease)).Set(x => x.StartedAtUtc, now).Set(x => x.LastAttemptAtUtc, now).Inc(x => x.AttemptCount, 1);
-        return _jobs.FindOneAndUpdateAsync(eligible, update, new FindOneAndUpdateOptions<IngestionJob> { Sort = Builders<IngestionJob>.Sort.Ascending(x => x.CreatedAtUtc), ReturnDocument = ReturnDocument.After }, ct);
+        return await _jobs.FindOneAndUpdateAsync(eligible, update, new FindOneAndUpdateOptions<IngestionJob> { Sort = Builders<IngestionJob>.Sort.Ascending(x => x.CreatedAtUtc), ReturnDocument = ReturnDocument.After }, ct).ConfigureAwait(false);
     }
     public async Task<bool> RenewLeaseAsync(string id, string worker, DateTimeOffset now, TimeSpan lease, CancellationToken ct = default) =>
         (await _jobs.UpdateOneAsync(x => x.Id == id && x.Status == IngestionJobStatus.Processing && x.WorkerId == worker && x.LeaseExpiresAtUtc >= now,

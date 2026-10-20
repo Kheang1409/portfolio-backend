@@ -9,6 +9,7 @@ using FluentAssertions;
 using KaiAssistant.Application.Services;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Diagnostics;
+using KaiAssistant.Application.AI;
 using KaiAssistant.Domain.Entities;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
@@ -378,4 +379,47 @@ public class AssistantServiceTests
         text.Should().NotContain("Phone");
         text.Should().Contain("Skills");
     }
-}
+
+    [Fact]
+    public async Task AskQuestionAsync_IncludesBothResumeAndRetrievedKnowledgeContext()
+    {
+        _mockResumeProvider.Setup(x => x.GetRelevantChunksAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ResumeChunk { Label = "Experience", Content = "Resume experience evidence" }]);
+        _mockPromptBuilder.Setup(x => x.BuildSystemPrompt()).Returns("System");
+        _mockPromptBuilder.Setup(x => x.BuildGenerationConfig(It.IsAny<string>()))
+            .Returns(new { temperature = 0.3, topK = 20, topP = 0.85, maxOutputTokens = 512, candidateCount = 1 });
+        var rag = new Mock<IRagService>();
+        rag.Setup(x => x.BuildAugmentedPromptAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RagContextResult
+            {
+                Snippets = [new RagSnippet { Source = "projects.md", Content = "Retrieved project evidence" }]
+            });
+        var geminiResponse = new
+        {
+            candidates = new object[]
+            {
+                new { content = new { parts = new object[] { new { text = "answer" } } } }
+            }
+        };
+        string? capturedPayload = null;
+        _mockGateway.Setup(x => x.SendGenerationRequestAsync(It.IsAny<string>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, IEnumerable<string>, CancellationToken>((payload, _, _) => capturedPayload = payload)
+            .ReturnsAsync((JsonSerializer.Serialize(geminiResponse), "gemini-1.5-pro"));
+        var assistantService = new AssistantService(
+            _mockResumeProvider.Object,
+            _mockPromptBuilder.Object,
+            _mockGateway.Object,
+            _mockOrchestrator.Object,
+            _geminiOptions,
+            _mockLogger.Object,
+            rag: rag.Object);
+
+        await assistantService.AskQuestionAsync("Question", cancellationToken: CancellationToken.None);
+
+        var payload = JsonDocument.Parse(capturedPayload!);
+        var contents = payload.RootElement.GetProperty("contents");
+        var contextText = contents[1].GetProperty("parts")[0].GetProperty("text").GetString();
+        contextText.Should().Contain("Resume experience evidence");
+        contextText.Should().Contain("Retrieved project evidence");
+    }
+}

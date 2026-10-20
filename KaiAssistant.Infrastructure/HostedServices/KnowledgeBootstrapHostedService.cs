@@ -46,7 +46,7 @@ public sealed class KnowledgeBootstrapHostedService(
             await RefreshAsync(file, config, cancellationToken).ConfigureAwait(false);
         }
         var embedding = embeddingOptions.Value;
-        await indexes.ActivateAsync(new KnowledgeIndexDescriptor(ragOptions.Value.IndexVersion, embedding.Provider, embedding.Model, embedding.Version, embedding.Dimensions), cancellationToken).ConfigureAwait(false);
+        await indexes.InitializeIfMissingAsync(new KnowledgeIndexDescriptor(ragOptions.Value.IndexVersion, embedding.Provider, embedding.Model, embedding.Version, embedding.Dimensions), cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Knowledge bootstrap completed. Files={FileCount}", files.Length);
     }
 

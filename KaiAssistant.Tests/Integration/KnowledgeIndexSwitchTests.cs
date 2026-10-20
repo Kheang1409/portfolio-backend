@@ -30,6 +30,26 @@ public sealed class KnowledgeIndexSwitchTests
     }
 
     [Fact]
+    public async Task Bootstrap_initializes_missing_index_without_overwriting_admin_activation()
+    {
+        using var runner = MongoTestRunner.Start();
+        var database = new MongoClient(runner.ConnectionString).GetDatabase("index-initialize-" + Guid.NewGuid().ToString("N"));
+        var rag = new Mock<IOptionsMonitor<RagOptions>>();
+        rag.SetupGet(x => x.CurrentValue).Returns(new RagOptions { IndexVersion = "knowledge-v1" });
+        var store = new MongoKnowledgeIndexStore(database, rag.Object);
+        var bootstrap = new KnowledgeIndexDescriptor("knowledge-v1", "gemini", "gemini-embedding-001", "pipeline-v1", 768);
+
+        await store.InitializeIfMissingAsync(bootstrap);
+        (await store.GetActiveAsync()).Should().Be(bootstrap);
+
+        var activated = new KnowledgeIndexDescriptor("knowledge-v2", "gemini", "gemini-embedding-001", "pipeline-v2", 768);
+        await store.ActivateAsync(activated);
+        await store.InitializeIfMissingAsync(bootstrap);
+
+        (await store.GetActiveAsync()).Should().Be(activated);
+    }
+
+    [Fact]
     public async Task Incomplete_staged_index_cannot_activate()
     {
         using var runner = MongoTestRunner.Start();

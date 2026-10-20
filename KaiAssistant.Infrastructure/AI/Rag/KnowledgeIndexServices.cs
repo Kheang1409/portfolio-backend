@@ -21,6 +21,12 @@ public sealed class MongoKnowledgeIndexStore(IMongoDatabase database, IOptionsMo
     public async Task<KnowledgeIndexDescriptor> GetActiveAsync(CancellationToken cancellationToken = default) =>
         (await _states.Find(x => x.Id == "active").FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false))?.Active
         ?? new(ragOptions.CurrentValue.IndexVersion, "deterministic", "sha256-projection", "embedding-v1", 64);
+    public Task InitializeIfMissingAsync(KnowledgeIndexDescriptor descriptor, CancellationToken cancellationToken = default) =>
+        _states.UpdateOneAsync(
+            x => x.Id == "active",
+            Builders<KnowledgeIndexState>.Update.SetOnInsert(x => x.Active, descriptor),
+            new UpdateOptions { IsUpsert = true },
+            cancellationToken);
     public async Task ActivateAsync(KnowledgeIndexDescriptor descriptor, CancellationToken cancellationToken = default)
     {
         var current = await _states.Find(x => x.Id == "active").FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);

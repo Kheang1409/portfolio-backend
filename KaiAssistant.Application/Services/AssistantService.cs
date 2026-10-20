@@ -294,7 +294,8 @@ public class AssistantService : IAssistantService
             : string.Empty;
         if (!string.IsNullOrWhiteSpace(retrievedContext))
         {
-            combinedResume = retrievedContext;
+            combinedResume = string.Join("\n\n", new[] { combinedResume, retrievedContext }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
         }
         var contextBlock = _promptBuilder.NormalizeContextBlock(context);
         int maxChars = _options.Value.PromptMaxChars;
@@ -657,7 +658,9 @@ public class AssistantService : IAssistantService
             : await _rag.BuildAugmentedPromptAsync(normalizedQuestion, cancellationToken).ConfigureAwait(false);
         if (ragContext is { Snippets.Count: > 0 })
         {
-            combinedResume = string.Join("\n\n", ragContext.Snippets.Select((x, i) => $"[Retrieved document {i + 1}; source={x.Source}]\n{x.Content}"));
+            var retrievedContext = string.Join("\n\n", ragContext.Snippets.Select((x, i) => $"[Retrieved document {i + 1}; source={x.Source}]\n{x.Content}"));
+            combinedResume = string.Join("\n\n", new[] { combinedResume, retrievedContext }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
         }
         var contextBlock = _promptBuilder.NormalizeContextBlock(context);
         var maxChars = _options.Value.PromptMaxChars;

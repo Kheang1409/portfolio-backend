@@ -37,6 +37,7 @@ public sealed record ReindexResult(string IndexVersion, int DocumentsTotal, int 
 public interface IKnowledgeIndexStore
 {
     Task<KnowledgeIndexDescriptor> GetActiveAsync(CancellationToken cancellationToken = default);
+    Task InitializeIfMissingAsync(KnowledgeIndexDescriptor descriptor, CancellationToken cancellationToken = default);
     Task ActivateAsync(KnowledgeIndexDescriptor descriptor, CancellationToken cancellationToken = default);
     Task RollbackAsync(CancellationToken cancellationToken = default);
 }
