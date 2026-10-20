@@ -2,14 +2,14 @@
 
 ## High-Level Overview
 
-KaiAssistant is a production-grade AI assistant backend built on .NET 10 with layered architecture and operational controls for high-scale workloads.
+KaiAssistant is a .NET 10 portfolio assistant backend with layered architecture, MongoDB persistence, Gemini integration, and operational controls. Production capacity and multi-instance ingestion depend on deployment-specific shared storage and infrastructure.
 
 Core runtime flow:
 
 1. Request enters API middleware pipeline.
 2. Request is validated, correlated, and rate-limited.
 3. Assistant application service executes AI flow.
-4. Infrastructure integrations provide RAG, cache, provider orchestration, persistence, and messaging.
+4. Infrastructure integrations provide RAG, response caching, Gemini model selection, and persistence.
 5. Response is returned with structured telemetry and trace context.
 
 ## Clean Architecture
@@ -29,7 +29,7 @@ Core runtime flow:
 ### Infrastructure Layer
 
 - Implements application abstractions.
-- Contains integration code for MongoDB, Redis, RabbitMQ, Gemini provider, and hosted processing loops.
+- Contains integration code for MongoDB, Redis, Gemini, and hosted processing loops.
 - Encapsulates resilience and external dependency behavior.
 
 ### API Layer
@@ -41,11 +41,12 @@ Core runtime flow:
 ## Component Responsibilities
 
 - AssistantController: single streaming endpoint for assistant chat.
-- AssistantService: orchestrates prompt safety, memory, RAG, semantic cache, and model generation.
-- AiOrchestratorService: provider routing and fallback execution.
+- AssistantService: builds prompts from conversation, resume, and RAG context before Gemini model generation.
+- ModelOrchestrator and GeminiGateway: model selection and Gemini request execution.
+- ToolRegistry and EnhancedAssistantOrchestrator are not registered by active startup; tool execution is not part of chat.
 - RagService: retrieval of relevant knowledge snippets.
-- SemanticCacheService: embedding-based response reuse.
+- SemanticCacheService: registered but not called from the active assistant request path.
 - ConversationService: short-term memory and summary rollover.
-- OutboxProcessorHostedService: reliable asynchronous event delivery.
+- DocumentIngestionWorker: Mongo-backed processing of queued knowledge ingestion jobs; uploaded file storage is currently instance-local.
 - RedisRateLimitingMiddleware: distributed request throttling.
 - GlobalExceptionMiddleware: consistent API error contracts.

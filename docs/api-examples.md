@@ -1,138 +1,67 @@
 # API Examples
 
-## Ask
+## Assistant stream (NDJSON)
 
-Request:
+The active assistant endpoint is `POST /api/assistant`. Each response line is a JSON event.
 
 ```bash
-curl -X POST http://localhost:8080/api/v2/assistants/ask \
+curl -N -X POST http://localhost:5000/api/assistant \
   -H "Content-Type: application/json" \
-  -d '{
-    "message":"Summarize KaiAssistant architecture in 3 bullets.",
-    "history":[],
-    "context":{"metadata":{"conversationId":"demo-ask-1"}}
-  }'
+  -d '{"message":"Summarize the architecture in three bullets."}'
 ```
 
-Example response:
+Example stream:
 
 ```json
-"- Clean architecture separates API, application, domain, and infrastructure.\n- AI flow combines RAG, semantic cache, and provider fallback.\n- Reliability uses distributed rate limiting, outbox processing, and telemetry."
+{"type":"delta","messageId":"...","text":"The backend uses..."}
+{"type":"completed","messageId":"..."}
 ```
 
-## Stream (NDJSON)
-
-Request:
+To retain conversation memory, provide a stable `conversationId` on each request:
 
 ```bash
-curl -N -X POST http://localhost:8080/api/v2/assistants/stream \
+curl -N -X POST http://localhost:5000/api/assistant \
   -H "Content-Type: application/json" \
-  -d '{"message":"Explain the outbox design."}'
+  -d '{"message":"What did I ask earlier?","conversationId":"demo-conversation"}'
 ```
 
-Example stream chunks:
+If `conversationId` is omitted, the API can resolve one from `context.metadata.sessionId`; otherwise it creates a request-specific conversation identifier.
 
-```json
-{"type":"delta","messageId":"...","text":"The outbox processor leases..."}
-{"type":"delta","messageId":"...","text":"It retries with backoff..."}
-{"type":"completed","messageId":"...","latencyMs":182}
-```
+## Knowledge administration
 
-## SSE
+Knowledge administration endpoints require a valid JWT with the configured issuer and audience and a `RagAdmin` role claim. Configure `RagAdminAuthentication:Authority`, `RagAdminAuthentication:Audience`, and (if needed) `RagAdminAuthentication:RoleClaimType` before use. The same authorization policy protects uploads, job/document status, cancellation, and index stage/activate/rollback.
 
-Request:
+Upload a document:
 
 ```bash
-curl -N -X POST http://localhost:8080/api/v2/assistants/sse \
-  -H "Content-Type: application/json" \
-  -d '{"message":"How does semantic caching work?"}'
+curl -X POST http://localhost:5000/api/admin/knowledge/documents \
+  -H "Authorization: Bearer $RAG_ADMIN_TOKEN" \
+  -F "file=@architecture.md"
 ```
 
-Example event stream:
+Poll job status using the returned `jobId`:
+
+```bash
+curl http://localhost:5000/api/admin/knowledge/jobs/$JOB_ID \
+  -H "Authorization: Bearer $RAG_ADMIN_TOKEN"
+```
+
+Index lifecycle operations use the same bearer token:
+
+```bash
+curl -X POST http://localhost:5000/api/admin/knowledge/indexes/stage \
+  -H "Authorization: Bearer $RAG_ADMIN_TOKEN"
+curl -X POST http://localhost:5000/api/admin/knowledge/indexes/activate \
+  -H "Authorization: Bearer $RAG_ADMIN_TOKEN"
+```
+
+## Other active endpoints
 
 ```text
-event: delta
-data: {"type":"delta","messageId":"...","text":"Semantic cache compares..."}
-
-event: completed
-data: {"type":"completed","messageId":"...","latencyMs":145}
-```
-
-## Explain (Signature Endpoint)
-
-Request:
-
-```bash
-curl -X POST http://localhost:8080/api/v2/assistants/explain \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message":"Explain how this backend balances latency, reliability, and cost.",
-    "context":{"metadata":{"conversationId":"demo-explain-1"}}
-  }'
-```
-
-Example response:
-
-```json
-{
-  "summary": "The backend combines retrieval, caching, and provider fallback to reduce latency while preserving reliability.",
-  "key_points": [
-    "RAG injects relevant context for grounded answers.",
-    "Semantic cache prevents repeated expensive model calls.",
-    "Fallback orchestration maintains availability when a provider fails."
-  ],
-  "related_projects": [
-    "project:kaiassistant-api",
-    "project:outbox-reliability"
-  ],
-  "confidence": 0.84
-}
-```
-
-## RAG-Enhanced Query
-
-Request:
-
-```bash
-curl -X POST http://localhost:8080/api/v2/assistants/ask \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Based on the architecture notes, what is the role of Redis?"}'
-```
-
-Behavior:
-
-- Retrieves knowledge snippets from knowledge_base_documents.
-- Augments prompt with top similarity context.
-- Returns grounded response when sufficient context exists.
-
-## Error Scenarios
-
-Validation error:
-
-```bash
-curl -X POST http://localhost:8080/api/v2/assistants/ask \
-  -H "Content-Type: application/json" \
-  -d '{"message":""}'
-```
-
-Example response:
-
-```json
-{
-  "type": "https://httpstatuses.com/400",
-  "title": "Validation failed",
-  "status": 400,
-  "errorCode": "VALIDATION_FAILED",
-  "retryable": false,
-  "traceId": "...",
-  "correlationId": "..."
-}
-```
-
-Rate-limit error:
-
-```json
-{
-  "message": "Rate limit exceeded. Please retry later."
-}
+POST /api/contacts
+POST /api/visits
+GET  /api/resumes/latest
+GET  /api/health
+GET  /health/ready
+GET  /health/live
 ```

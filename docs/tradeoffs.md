@@ -20,14 +20,14 @@
 - Benefit: high-throughput shared state across stateless nodes.
 - Tradeoff: added operational dependency and failure-mode complexity.
 
-### Multi-Provider AI Orchestration
+### Gemini model selection
 
-- Decision: explicit orchestrator with fallback capability.
-- Benefit: improved availability and operational resilience.
-- Tradeoff: increased policy complexity and provider drift management.
+- Decision: select and retry among configured Gemini models; the chat path does not currently use cross-provider fallback.
+- Benefit: model-level availability and routing without maintaining multiple active provider integrations.
+- Tradeoff: all chat availability still depends on Gemini.
 
-### Semantic Cache + RAG Combination
+### Exact response cache + RAG
 
-- Decision: use semantic reuse before expensive model calls while grounding prompts with retrieved context.
-- Benefit: lower cost/latency and better relevance for repeat/similar queries.
-- Tradeoff: embedding quality and threshold tuning become system-level concerns.
+- Decision: use exact response caching at prompt construction, keyed by question, conversation, and selected evidence.
+- Benefit: repeated equivalent requests can avoid model calls without reusing answers for semantically similar but non-identical questions.
+- Tradeoff: retrieval and prompt assembly still run before cache lookup; fewer hits than semantic reuse. The outer orchestrator cache and registered semantic cache are not used by the active chat path.

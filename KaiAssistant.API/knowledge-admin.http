@@ -1,0 +1,40 @@
+@baseUrl = http://localhost:5000
+@ragAdminToken = {{$processEnv RAG_ADMIN_TOKEN}}
+@jobId = replace-with-job-id
+@documentId = replace-with-document-id
+
+### Upload knowledge document
+POST {{baseUrl}}/api/admin/knowledge/documents
+Authorization: Bearer {{ragAdminToken}}
+Content-Type: multipart/form-data; boundary=ragUploadBoundary
+
+--ragUploadBoundary
+Content-Disposition: form-data; name="file"; filename="projects-and-architecture.md"
+Content-Type: text/markdown
+
+< ../docs/rag-corpus/projects-and-architecture.md
+--ragUploadBoundary--
+
+### Get ingestion job status
+GET {{baseUrl}}/api/admin/knowledge/jobs/{{jobId}}
+Authorization: Bearer {{ragAdminToken}}
+
+### Get document status
+GET {{baseUrl}}/api/admin/knowledge/documents/{{documentId}}
+Authorization: Bearer {{ragAdminToken}}
+
+### Cancel a queued ingestion job
+POST {{baseUrl}}/api/admin/knowledge/jobs/{{jobId}}/cancel
+Authorization: Bearer {{ragAdminToken}}
+
+### Stage a new index
+POST {{baseUrl}}/api/admin/knowledge/indexes/stage
+Authorization: Bearer {{ragAdminToken}}
+
+### Activate the staged index
+POST {{baseUrl}}/api/admin/knowledge/indexes/activate
+Authorization: Bearer {{ragAdminToken}}
+
+### Roll back the active index
+POST {{baseUrl}}/api/admin/knowledge/indexes/rollback
+Authorization: Bearer {{ragAdminToken}}

@@ -60,6 +60,21 @@ Parameters:
     NoEcho: true
     Description: Google Gemini API key
 
+  RagAdminJwtAuthority:
+    Type: String
+    MinLength: 1
+    Description: HTTPS issuer URL for admin JWT validation
+
+  RagAdminJwtAudience:
+    Type: String
+    MinLength: 1
+    Description: Expected audience claim for admin JWTs
+
+  RagAdminJwtRoleClaimType:
+    Type: String
+    Default: role
+    Description: Claim type containing the RagAdmin role
+
   SmtpEnabled:
     Type: String
     Default: "true"
@@ -153,6 +168,11 @@ Resources:
       Handler: KaiAssistant.API
       CodeUri: ../KaiAssistant.API/
       Description: KaiAssistant API Lambda Function
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref KnowledgeDocumentsBucket
+        - S3WritePolicy:
+            BucketName: !Ref KnowledgeDocumentsBucket
       Environment:
         Variables:
           MONGODB_CONNECTIONSTRING: !Ref MongoConnectionString
@@ -167,6 +187,9 @@ Resources:
           SMTP_SENDER_PASSWORD: !Ref SmtpSenderPassword
           SMTP_ENABLED: !Ref SmtpEnabled
           GEMINI_API_KEY: !Ref GeminiApiKey
+          RAGADMINAUTHENTICATION__AUTHORITY: !Ref RagAdminJwtAuthority
+          RAGADMINAUTHENTICATION__AUDIENCE: !Ref RagAdminJwtAudience
+          RAGADMINAUTHENTICATION__ROLECLAIMTYPE: !Ref RagAdminJwtRoleClaimType
           GEMINI_MODEL_NAMES: !Ref GeminiModelNames
           GEMINI_ENDPOINT: !Ref GeminiEndpoint
           GEMINI_SYSTEM_PROMPT: !Ref GeminiSystemPrompt
@@ -177,6 +200,9 @@ Resources:
           GEMINI_TOPP: !Ref GeminiTopP
           GEMINI_MAX_OUTPUT_TOKENS: !Ref GeminiMaxOutputTokens
           GEMINI_CANDIDATE_COUNT: !Ref GeminiCandidateCount
+          RAGINGESTION__STORAGEPROVIDER: S3
+          RAGINGESTION__S3BUCKET: !Ref KnowledgeDocumentsBucket
+          RAGINGESTION__S3KEYPREFIX: knowledge
           GEMINI_TOP_CHUNKS: !Ref GeminiTopChunks
           GEMINISETTINGS__LASTSUCCESSFULMODELCACHETTLSECONDS: !Ref GeminiLastSuccessfulModelCacheTtlSeconds
           GEMINISETTINGS__SKIPRETRYDELAYTHRESHOLDSECONDS: !Ref GeminiSkipRetryDelayThresholdSeconds
@@ -189,6 +215,21 @@ Resources:
             Path: /{proxy+}
             Method: ANY
             ApiId: !Ref KaiAssistantApi
+
+  KnowledgeDocumentsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
   KaiAssistantApi:
     Type: AWS::Serverless::HttpApi

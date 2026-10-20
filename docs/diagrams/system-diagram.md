@@ -4,26 +4,28 @@
 flowchart LR
     Client[Client App or Browser] --> API[ASP.NET Core API]
     API --> Middleware[Security + Correlation + Rate Limiting + Exceptions]
-    Middleware --> Assistant[Assistant Service]
+    Middleware --> Controller[Assistant Controller]
+    Controller --> Orchestrator[Assistant Orchestrator]
+    Orchestrator --> Assistant[Assistant Service]
 
-    Assistant --> Rag[RAG Service]
-    Assistant --> SemCache[Semantic Cache Service]
-    Assistant --> Orchestrator[AI Orchestrator]
-    Assistant --> Memory[Conversation Service]
+    Assistant --> Resume[Resume context provider]
+    Assistant --> Rag[RAG service]
+    Assistant --> PromptCache[Prompt/context response cache]
+    Assistant --> Gemini[Gemini gateway and model selection]
+    Rag --> Mongo[(MongoDB knowledge chunks)]
+    Resume --> Mongo
+    Orchestrator --> Conversation[Conversation history]
+    Conversation --> Mongo
 
-    Rag --> Mongo[(MongoDB)]
-    SemCache --> Redis[(Redis)]
-    SemCache --> Mongo
-    Memory --> Mongo
-
-    Orchestrator --> ProviderA[Gemini Provider]
-    Orchestrator --> ProviderB[Fallback Provider]
-
-    API --> Outbox[Outbox Processor]
-    Outbox --> Mongo
-    Outbox --> Rabbit[(RabbitMQ)]
+    Admin[Authorized knowledge admin API] --> LocalFiles[Instance-local uploaded files]
+    Admin --> MongoJobs[MongoDB ingestion jobs]
+    Worker[Document ingestion worker] --> MongoJobs
+    Worker --> LocalFiles
+    Worker --> Mongo
 
     API --> Obs[OpenTelemetry + Serilog]
     Assistant --> Obs
-    Orchestrator --> Obs
+    Rag --> Obs
 ```
+
+The tool-calling prototype, semantic response cache, RabbitMQ publisher, and outbox worker are not wired into this active request path.

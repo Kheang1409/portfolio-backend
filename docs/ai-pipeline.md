@@ -2,36 +2,31 @@
 
 ## End-to-End Orchestration Flow
 
-1. Input sanitization and prompt-injection checks run first.
-2. Conversation memory is loaded using conversation ID.
-3. Conversation summary is appended when available.
-4. RAG context is retrieved from knowledge documents.
-5. Semantic cache lookup runs against embedding similarity.
-6. If cache miss, orchestrator invokes AI provider.
-7. Provider fallback triggers when primary fails or times out.
-8. Output is sanitized and persisted to memory/cache.
+1. The API validates the request and resolves its conversation ID.
+2. The orchestrator loads the bounded conversation history.
+3. `AssistantService` selects resume context and retrieves RAG snippets before checking its prompt-level response cache.
+4. The prompt cache key includes the question, history, selected resume/RAG context, and request context.
+5. The Gemini gateway streams a response on a cache miss; the orchestrator persists the exchange.
 
 ## RAG Pipeline
 
-- Query is embedded via deterministic embedding service.
-- Knowledge documents are scanned and scored by cosine similarity.
-- A deterministic selector applies evidence, chunk-count, estimated-token, and duplicate limits.
-- Prompt is augmented with concise context lines.
-- Model is asked to ground response in provided context.
+- Keyword retrieval runs first. If keyword evidence is weak, compatible Gemini embeddings and Mongo vector search are used and fused with keyword results.
+- A selector applies evidence, chunk-count, estimated-token, and duplicate limits.
+- Selected RAG snippets are combined with resume context before prompt construction.
+- When no RAG evidence is selected, the prompt can still include relevant resume context.
 
 Retrieved material remains untrusted data. Source identity is retained through selection, and weak/no evidence leaves the original question unaugmented so the model can state that portfolio evidence is insufficient.
 
-## Semantic Caching Logic
+## Response Caching
 
-- Cache key hot-path: hashed prompt to Redis/memory cache.
-- Deep path: compare query embedding against recent cached prompt embeddings in MongoDB.
-- Hit criteria: best similarity must exceed configured threshold.
-- On hit: cached response returned with cache metadata.
-- On miss: response generated and written back to hot + semantic stores.
+- The active assistant uses exact response caching, not semantic response reuse.
+- The active prompt-level key includes the question, conversation history, selected resume/RAG context, and request context.
+- The outer orchestrator response cache is intentionally not used for chat because it cannot account for retrieved evidence.
+- `SemanticCacheService` is registered but is not called from the active assistant request path.
 
-## Fallback Strategy
+## Model selection and fallback
 
-- Primary provider selected from feature flag + orchestration options.
-- Secondary provider used when primary throws, times out, or is unavailable.
-- Fallback events are emitted to logs and metrics.
-- Response metadata indicates fallback usage.
+- The active chat flow uses `AssistantService`, `ModelOrchestrator`, and the Gemini gateway.
+- The gateway can select among configured Gemini model names; the OpenAI provider is a stub and is not registered for chat fallback.
+- The separate `AiOrchestratorService` provider-fallback path is not used by the chat endpoint.
+- The enhanced tool-calling orchestrator is not registered by active startup; chat does not execute model-selected tools or perform agentic retrieval loops.

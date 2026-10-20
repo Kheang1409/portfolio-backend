@@ -39,6 +39,6 @@ Retrieved documents are data, not instructions. The system prompt states that sy
 
 `IDocumentIngestionService` performs idempotent text ingestion using a normalized content hash. It records a `KnowledgeDocument`, chunks text on nearby sentence boundaries, generates an embedding for each chunk, and upserts `KnowledgeChunk` records through `IVectorStore`. A duplicate hash returns the existing document instead of recomputing embeddings.
 
-For a multi-instance deployment, invoke this service from a durable queue consumer rather than an HTTP request. The current repository does not expose document uploads because it has no admin identity or file-storage contract yet.
+`POST /api/admin/knowledge/documents` and the related job/index routes are included and protected by JWT Bearer and the `RagAdmin` role policy. Production requires a configured HTTPS issuer and audience. The ingestion services and worker are registered. `IDocumentStorage` supports local development storage and S3; AWS SAM configures S3 for multi-instance and ephemeral deployments.
 
-The repository now provides that boundary at `POST /api/admin/knowledge/documents`. It requires the `RagAdmin` role and returns a durable ingestion-job identifier immediately; processing occurs in `DocumentIngestionWorker`.
+At startup, `KnowledgeBootstrapHostedService` loads the repository corpus and initializes the active index descriptor only when no descriptor exists. Subsequent admin activation or rollback choices are preserved across restarts.

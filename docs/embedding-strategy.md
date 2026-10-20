@@ -20,7 +20,7 @@ Metrics include request duration, batch size, requests, failures, cache hits/mis
 
 The active index remains `knowledge-v1` until an administrator stages and validates `knowledge-gemini-001-v2`. Chunk IDs are deterministic over document ID, chunk ordinal, and index version, so interrupted staging is resumable without duplicates. Existing chunks are not deleted.
 
-Protected `RagAdmin` operations are:
+JWT-authenticated users with the configured `RagAdmin` role may call:
 
 - `POST /api/admin/knowledge/indexes/stage`
 - `POST /api/admin/knowledge/indexes/activate`
@@ -28,7 +28,7 @@ Protected `RagAdmin` operations are:
 
 Activation refuses an incomplete target and atomically replaces the active descriptor while retaining the prior descriptor. Rollback swaps them. While the legacy SHA index is active, semantic retrieval is deliberately disabled and hybrid degrades to active-index keyword retrieval; vectors from incompatible spaces are never compared.
 
-The current Mongo store performs a bounded application-side scan (500 chunks) with cosine similarity. This is adequate for the portfolio corpus. The historical Atlas index is 64-dimensional and is not used for the real-vector path; introduce a deployment-specific 768-dimensional Atlas index only if measured scale or latency warrants it.
+The current Mongo store performs a bounded application-side scan (500 chunks) with cosine similarity. This is adequate only for the current small portfolio corpus, not a claim of large-scale vector retrieval. The historical Atlas index is 64-dimensional and is not used for the real-vector path; introduce a deployment-specific 768-dimensional Atlas index only if measured scale or latency warrants it.
 
 ## Evaluation and activation status
 

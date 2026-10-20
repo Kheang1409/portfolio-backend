@@ -22,9 +22,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Controllers\AdminKnowledgeController.cs" />
-  </ItemGroup>
-  <ItemGroup>
     <Content Include="..\docs\rag-corpus\**\*" Link="rag-corpus\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

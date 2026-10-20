@@ -27,7 +27,7 @@ The resolved versions are above the patched floors identified by the GitHub advi
 
 ## Compatibility checks
 
-MongoDB persistence, ingestion, leasing, vector, and repository tests remain part of the solution test run. API startup was exercised against the configured MongoDB instance; Swagger generation returned `200`, retained `/api/assistant`, and represented the admin upload route as `multipart/form-data`. The upload action uses a request DTO to remain compatible with the upgraded Swashbuckle generator while preserving field names and route contracts.
+MongoDB persistence, ingestion, leasing, vector, and repository tests remain part of the solution test run. API startup was exercised against the configured MongoDB instance; Swagger generation returned `200` and retained `/api/assistant`. Knowledge administration routes are included in the API and protected by JWT Bearer plus the `RagAdmin` role policy.
 
 The OpenTelemetry packages are intentionally upgraded as one family. The existing meters and activities remain registered, and API startup completed with the 1.16.0 runtime.
 

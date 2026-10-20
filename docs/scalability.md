@@ -1,34 +1,20 @@
 # Scalability
 
-## Horizontal Scale Model
+## Current runtime
 
-- Compute: API is compatible with AWS Lambda hosting and stateless web scaling.
-- Cache and control-plane state: Redis supports distributed rate limiting, telemetry counters, and idempotency stores.
-- Durable state: MongoDB stores resumes, outbox, conversations, knowledge docs, model health, and evaluations.
+- The API uses MongoDB for resumes, conversations, knowledge documents, and ingestion jobs.
+- Redis-backed services support rate limiting and cache operations, with configured local fallbacks.
+- The knowledge ingestion worker uses Mongo leases to coordinate job claims.
+- RAG vector retrieval currently scans a bounded maximum of 500 chunks in the application; this is appropriate only for the small portfolio corpus.
 
-## Scale Characteristics
+## Limits before scaling
 
-- Stateless API nodes can scale out independently.
-- Concurrency-sensitive flows (outbox leasing, idempotency) use distributed coordination.
-- Read-heavy assistant workloads benefit from semantic cache and retrieval filtering.
+- AWS SAM configures shared, encrypted S3 storage for ingestion files. Local storage remains intended for development only.
+- Knowledge administration routes are JWT-protected and require the configured `RagAdmin` role.
+- RabbitMQ/outbox processing is not registered on the active startup path.
+- No production capacity claim is made for current retrieval, cache, or worker settings; measure with the intended deployment and corpus before increasing traffic.
+- AI provider latency and availability remain external dependencies. The active chat path selects among configured Gemini models; it does not use a registered secondary provider.
 
-## Bottlenecks and Mitigations
+## Ingestion worker behavior
 
-- AI provider latency:
-  - Mitigation: timeout + retries + provider fallback + cache reuse.
-- Mongo retrieval pressure:
-  - Mitigation: targeted indexes, projection queries, candidate limits.
-- Redis saturation under spikes:
-  - Mitigation: endpoint-specific limits, sliding windows, telemetry visibility.
-- Outbox backlog growth:
-  - Mitigation: leasing, partitioning, max concurrency, dead-letter after max attempts.
-
-## Runtime Scaling Notes
-
-- Enable Redis and RabbitMQ in production to avoid single-node fallbacks.
-- Tune endpoint-specific rate limits by traffic profile.
-- Increase outbox partitions and consumers for high event throughput.
-
-## Ingestion workers
-
-`DocumentIngestionWorker` claims durable Mongo jobs with an owner-specific lease and admits no more than `RagIngestion:MaxConcurrency` active jobs per instance. Multiple instances can run concurrently because claiming is an atomic conditional update. Active leases are renewed conditionally; expired leases are recoverable by another worker. Shutdown stops new claims and awaits admitted tasks.
+`DocumentIngestionWorker` claims Mongo jobs with an owner-specific lease and admits no more than `RagIngestion:MaxConcurrency` active jobs per instance. Active leases are renewed conditionally; expired leases can be reclaimed by another worker because uploaded files are stored in shared S3 when running in AWS SAM. Shutdown stops new claims and awaits admitted tasks.

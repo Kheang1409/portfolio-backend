@@ -1,6 +1,6 @@
 # KaiAssistant API
 
-> Documentation note: the active backend is repository-corpus, keyword-first RAG with optional semantic fallback. Admin upload, ingestion jobs, RabbitMQ/outbox, and mandatory Redis are not runtime features.
+> Runtime note: the active assistant uses repository-corpus, keyword-first RAG with optional semantic retrieval and a prompt/context-aware exact response cache. Mongo-backed ingestion services and a worker are registered. Local development defaults to instance-local storage; AWS SAM production uses a private, encrypted S3 bucket. Knowledge administration uses JWT Bearer with a required `RagAdmin` role. RabbitMQ/outbox publishing is not part of the active startup path.
 
 KaiAssistant API is the .NET 10 backend for the portfolio app.
 
@@ -23,16 +23,11 @@ query -> keyword retrieval -> strong evidence -> bounded context -> Gemini strea
 
 `KnowledgeBootstrapHostedService` runs once at startup. It hashes supported corpus files, skips unchanged sources, writes keyword chunks to MongoDB, and optionally creates Gemini embeddings for changed content. Embedding failures keep keyword knowledge usable.
 
-`IDocumentIngestionService` is idempotent on a normalized SHA-256 content hash. It normalizes text, splits near sentence boundaries with configurable overlap, generates embeddings, and writes chunks and vectors. The protected admin upload endpoint selects the durable ingestion workflow; configure it with `RagIngestion` in `appsettings.json`.
+`IDocumentIngestionService` is idempotent on a normalized SHA-256 content hash. It normalizes text, splits near sentence boundaries with configurable overlap, generates embeddings, and writes chunks and vectors. Configure `RagIngestion:StorageProvider` as `Local` or `S3`; S3 requires `RagIngestion:S3Bucket` and uses the AWS SDK credential chain. Local development stores files under `App_Data/knowledge`. AWS SAM provisions a private encrypted bucket and grants the Lambda role read/write access.
 
-Administrators with the `RagAdmin` role can enqueue supported text, Markdown, and JSON documents asynchronously:
+Knowledge upload and index-management routes require a JWT whose issuer and audience match `RagAdminAuthentication:Authority` and `RagAdminAuthentication:Audience`, and whose configured role claim contains `RagAdmin`. Set `RagAdminAuthentication:RoleClaimType` if the identity provider uses a claim name other than `role`. Production startup rejects missing or non-HTTPS issuer configuration.
 
-```bash
-curl -X POST http://localhost:5000/api/admin/knowledge/documents \
-  -H "Authorization: Bearer <admin-token>" -F "file=@resume.md"
-```
-
-The API returns `202 Accepted` with a job URL; poll `GET /api/admin/knowledge/jobs/{jobId}` for completion.
+For AWS SAM deployments, configure the GitHub Actions repository variables `RAG_ADMIN_JWT_AUTHORITY` and `RAG_ADMIN_JWT_AUDIENCE`; set `RAG_ADMIN_JWT_ROLE_CLAIM_TYPE` if needed. Local development can set the corresponding `RAGADMINAUTHENTICATION__AUTHORITY`, `RAGADMINAUTHENTICATION__AUDIENCE`, and `RAGADMINAUTHENTICATION__ROLECLAIMTYPE` environment variables.
 
 Retrieved content is explicitly marked as untrusted reference data in the model prompt. System and application policy instructions take precedence over both user input and retrieved text.
 
@@ -46,7 +41,7 @@ Dependency auditing and supply-chain decisions are documented in [docs/dependenc
 
 - Domain layer for core entities.
 - Application layer for use cases, DTOs, and orchestration contracts.
-- Infrastructure layer for persistence, AI providers, cache, event bus, and external services.
+- Infrastructure layer for persistence, Gemini integration, cache, and external services.
 - API layer for controllers, middleware, and startup wiring.
 
 ## Runtime Notes

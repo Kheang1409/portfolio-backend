@@ -5,26 +5,22 @@
 - Retries:
   - AI orchestrator execution retries transient failures.
   - Mongo read/write providers retry transient Mongo exceptions.
-  - RabbitMQ and SMTP publishers apply bounded retry with backoff.
+  - SMTP publishing applies bounded retry with backoff.
 - Circuit breakers:
-  - AI orchestrator, RabbitMQ publisher, SMTP sender include circuit breaking.
+  - SMTP sender includes circuit breaking; the active chat path uses Gemini gateway/model resilience.
 - Timeouts:
   - AI provider invocation bounded by configured provider timeout.
   - HTTP and integration operations use explicit timeout controls.
 - Fallbacks:
-  - Provider fallback from primary to secondary model provider.
+  - The active chat path can fall back among configured Gemini model names; a secondary provider is not registered for chat.
   - Rate limiter and telemetry have controlled in-memory fallbacks when Redis is unavailable.
 
 ## Failure Scenarios
 
-- Primary AI model unavailable:
-  - System triggers fallback provider and records fallback metric/log.
+- A configured Gemini model is unavailable:
+  - The Gemini gateway can try another configured model and records model health/failure state.
 - Redis unavailable:
   - Request limits and telemetry degrade to bounded local fallback when strict mode disabled.
-- RabbitMQ unavailable:
-  - Outbox processing retries and retains message for later replay.
-- Processing poison messages:
-  - Outbox dead-letters after max attempts.
 - Slow downstream dependencies:
   - Timeout policies fail fast and preserve API responsiveness.
 
@@ -34,6 +30,6 @@
 - OpenTelemetry spans expose nested operation timings.
 - Dashboard-ready counters/histograms capture fallback rates, cache behavior, and outbox health.
 
-## Durable ingestion recovery
+## Ingestion job recovery
 
-Transient ingestion failures return jobs to `Queued` with exponential backoff and jitter. Jobs exceeding `MaxAttempts` become `DeadLetter` with bounded diagnostic error text. A worker crash leaves a lease that expires, allowing another instance to recover the job. One job failure is isolated from other active jobs.
+Transient ingestion failures return jobs to `Queued` with exponential backoff and jitter. Jobs exceeding `MaxAttempts` become `DeadLetter` with bounded diagnostic error text. A worker crash leaves a lease that expires, allowing another worker to recover the job. This recovery applies to Mongo job state; AWS SAM stores uploaded files in shared S3, while local storage is instance-local.

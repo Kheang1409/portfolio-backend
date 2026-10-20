@@ -79,6 +79,9 @@ jobs:
             "ParameterKey=SmtpEnabled,ParameterValue=false"
             "ParameterKey=ASPNetCoreEnvironment,ParameterValue=Production"
             "ParameterKey=GeminiApiKey,ParameterValue=${{ secrets.GEMINI_API_KEY }}"
+            "ParameterKey=RagAdminJwtAuthority,ParameterValue=${{ vars.RAG_ADMIN_JWT_AUTHORITY }}"
+            "ParameterKey=RagAdminJwtAudience,ParameterValue=${{ vars.RAG_ADMIN_JWT_AUDIENCE }}"
+            "ParameterKey=RagAdminJwtRoleClaimType,ParameterValue=${{ vars.RAG_ADMIN_JWT_ROLE_CLAIM_TYPE || 'role' }}"
           )
           sam deploy \
             --template .aws-sam/build/template.yaml \

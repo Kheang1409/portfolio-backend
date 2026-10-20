@@ -60,6 +60,7 @@ builder.Services.AddOpenTelemetry()
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAiOrchestration(builder.Configuration);
+builder.Services.AddRagAdminAuthentication(builder.Configuration);
 builder.Services.AddConfiguredCors(builder.Configuration);
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache();
@@ -160,6 +161,8 @@ app.UseResponseCompression();
 app.UseOutputCache();
 app.UseMiddleware<RedisRateLimitingMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
 var httpsUrlConfigured = builder.Configuration.GetSection("Kestrel").Exists() ||
                          (builder.Configuration["ASPNETCORE_URLS"]?.Contains("https://") ?? false);
 if (httpsUrlConfigured)
@@ -207,6 +210,14 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
     if (string.IsNullOrWhiteSpace(mongoConn) || string.IsNullOrWhiteSpace(mongoDb))
     {
         throw new InvalidOperationException("MongoDB configuration is required in production.");
+    }
+    var ragAdminAuthority = configuration["RagAdminAuthentication:Authority"];
+    var ragAdminAudience = configuration["RagAdminAuthentication:Audience"];
+    if (!Uri.TryCreate(ragAdminAuthority, UriKind.Absolute, out var authorityUri) ||
+        !string.Equals(authorityUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+        string.IsNullOrWhiteSpace(ragAdminAudience))
+    {
+        throw new InvalidOperationException("RagAdminAuthentication requires an HTTPS Authority and an Audience in production.");
     }
     var aiGovernance = configuration.GetSection(AiGovernanceOptions.SectionName).Get<AiGovernanceOptions>() ?? new AiGovernanceOptions();
     if (aiGovernance.Enabled)
