@@ -27,7 +27,7 @@ query -> keyword retrieval -> strong evidence -> bounded context -> Gemini strea
 
 Knowledge upload and index-management routes require a JWT whose issuer and audience match `RagAdminAuthentication:Authority` and `RagAdminAuthentication:Audience`, and whose configured role claim contains `RagAdmin`. Set `RagAdminAuthentication:RoleClaimType` if the identity provider uses a claim name other than `role`. Production startup rejects missing or non-HTTPS issuer configuration.
 
-For AWS SAM deployments, configure the GitHub Actions repository variables `RAG_ADMIN_JWT_AUTHORITY` and `RAG_ADMIN_JWT_AUDIENCE`; set `RAG_ADMIN_JWT_ROLE_CLAIM_TYPE` if needed. Local development can set the corresponding `RAGADMINAUTHENTICATION__AUTHORITY`, `RAGADMINAUTHENTICATION__AUDIENCE`, and `RAGADMINAUTHENTICATION__ROLECLAIMTYPE` environment variables.
+For AWS SAM deployments, configure the GitHub Actions repository variables `RAG_ADMIN_JWT_AUTHORITY` and `RAG_ADMIN_JWT_AUDIENCE`; `RAG_ADMIN_JWT_ROLE_CLAIM_TYPE` defaults to Cognito's `cognito:groups` claim. The workflow validates that issuer and audience are present HTTPS URLs before starting deployment. For Cognito, the authority must match the pool issuer exactly, and the audience URL must be configured as a resource binding so it appears in the access token's `aud` claim. Local development can set the corresponding `RAGADMINAUTHENTICATION__AUTHORITY`, `RAGADMINAUTHENTICATION__AUDIENCE`, and `RAGADMINAUTHENTICATION__ROLECLAIMTYPE` environment variables.
 
 Retrieved content is explicitly marked as untrusted reference data in the model prompt. System and application policy instructions take precedence over both user input and retrieved text.
 

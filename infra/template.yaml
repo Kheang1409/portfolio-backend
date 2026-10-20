@@ -72,7 +72,7 @@ Parameters:
 
   RagAdminJwtRoleClaimType:
     Type: String
-    Default: role
+    Default: cognito:groups
     Description: Claim type containing the RagAdmin role
 
   SmtpEnabled:

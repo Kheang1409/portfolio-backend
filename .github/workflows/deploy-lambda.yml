@@ -18,6 +18,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Validate admin JWT deployment settings
+        env:
+          RAG_ADMIN_JWT_AUTHORITY: ${{ vars.RAG_ADMIN_JWT_AUTHORITY }}
+          RAG_ADMIN_JWT_AUDIENCE: ${{ vars.RAG_ADMIN_JWT_AUDIENCE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$RAG_ADMIN_JWT_AUTHORITY" ]]; then
+            echo "::error::Set the RAG_ADMIN_JWT_AUTHORITY Actions variable in this repository."
+            exit 1
+          fi
+          if [[ -z "$RAG_ADMIN_JWT_AUDIENCE" ]]; then
+            echo "::error::Set the RAG_ADMIN_JWT_AUDIENCE Actions variable in this repository."
+            exit 1
+          fi
+          if [[ ! "$RAG_ADMIN_JWT_AUTHORITY" =~ ^https://[^/]+/.+ ]]; then
+            echo "::error::RAG_ADMIN_JWT_AUTHORITY must be an HTTPS issuer URL."
+            exit 1
+          fi
+          if [[ ! "$RAG_ADMIN_JWT_AUDIENCE" =~ ^https://[^/]+ ]]; then
+            echo "::error::RAG_ADMIN_JWT_AUDIENCE must be an HTTPS API audience URL."
+            exit 1
+          fi
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -65,7 +88,12 @@ jobs:
           fi
 
       - name: SAM Deploy
+        env:
+          RAG_ADMIN_JWT_AUTHORITY: ${{ vars.RAG_ADMIN_JWT_AUTHORITY }}
+          RAG_ADMIN_JWT_AUDIENCE: ${{ vars.RAG_ADMIN_JWT_AUDIENCE }}
+          RAG_ADMIN_JWT_ROLE_CLAIM_TYPE: ${{ vars.RAG_ADMIN_JWT_ROLE_CLAIM_TYPE || 'cognito:groups' }}
         run: |
+          set -euo pipefail
           # Gmail app passwords are often shown with spaces; strip all whitespace to avoid truncation/splitting.
           SMTP_SENDER_PASSWORD_CLEAN="$(printf '%s' "${{ secrets.SMTP_SENDER_PASSWORD }}" | tr -d '[:space:]')"
           PARAM_OVERRIDES=(
@@ -79,9 +107,9 @@ jobs:
             "ParameterKey=SmtpEnabled,ParameterValue=false"
             "ParameterKey=ASPNetCoreEnvironment,ParameterValue=Production"
             "ParameterKey=GeminiApiKey,ParameterValue=${{ secrets.GEMINI_API_KEY }}"
-            "ParameterKey=RagAdminJwtAuthority,ParameterValue=${{ vars.RAG_ADMIN_JWT_AUTHORITY }}"
-            "ParameterKey=RagAdminJwtAudience,ParameterValue=${{ vars.RAG_ADMIN_JWT_AUDIENCE }}"
-            "ParameterKey=RagAdminJwtRoleClaimType,ParameterValue=${{ vars.RAG_ADMIN_JWT_ROLE_CLAIM_TYPE || 'role' }}"
+            "RagAdminJwtAuthority=$RAG_ADMIN_JWT_AUTHORITY"
+            "RagAdminJwtAudience=$RAG_ADMIN_JWT_AUDIENCE"
+            "RagAdminJwtRoleClaimType=$RAG_ADMIN_JWT_ROLE_CLAIM_TYPE"
           )
           sam deploy \
             --template .aws-sam/build/template.yaml \
