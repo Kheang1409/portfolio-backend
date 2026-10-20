@@ -20,16 +20,16 @@ jobs:
 
       - name: Validate admin JWT deployment settings
         env:
-          RAG_ADMIN_JWT_AUTHORITY: ${{ vars.RAG_ADMIN_JWT_AUTHORITY }}
-          RAG_ADMIN_JWT_AUDIENCE: ${{ vars.RAG_ADMIN_JWT_AUDIENCE }}
+          RAG_ADMIN_JWT_AUTHORITY: ${{ secrets.RAG_ADMIN_JWT_AUTHORITY }}
+          RAG_ADMIN_JWT_AUDIENCE: ${{ secrets.RAG_ADMIN_JWT_AUDIENCE }}
         run: |
           set -euo pipefail
           if [[ -z "$RAG_ADMIN_JWT_AUTHORITY" ]]; then
-            echo "::error::Set the RAG_ADMIN_JWT_AUTHORITY Actions variable in this repository."
+            echo "::error::Set the RAG_ADMIN_JWT_AUTHORITY Actions secret in this repository."
             exit 1
           fi
           if [[ -z "$RAG_ADMIN_JWT_AUDIENCE" ]]; then
-            echo "::error::Set the RAG_ADMIN_JWT_AUDIENCE Actions variable in this repository."
+            echo "::error::Set the RAG_ADMIN_JWT_AUDIENCE Actions secret in this repository."
             exit 1
           fi
           if [[ ! "$RAG_ADMIN_JWT_AUTHORITY" =~ ^https://[^/]+/.+ ]]; then
@@ -89,9 +89,9 @@ jobs:
 
       - name: SAM Deploy
         env:
-          RAG_ADMIN_JWT_AUTHORITY: ${{ vars.RAG_ADMIN_JWT_AUTHORITY }}
-          RAG_ADMIN_JWT_AUDIENCE: ${{ vars.RAG_ADMIN_JWT_AUDIENCE }}
-          RAG_ADMIN_JWT_ROLE_CLAIM_TYPE: ${{ vars.RAG_ADMIN_JWT_ROLE_CLAIM_TYPE || 'cognito:groups' }}
+          RAG_ADMIN_JWT_AUTHORITY: ${{ secrets.RAG_ADMIN_JWT_AUTHORITY }}
+          RAG_ADMIN_JWT_AUDIENCE: ${{ secrets.RAG_ADMIN_JWT_AUDIENCE }}
+          RAG_ADMIN_JWT_ROLE_CLAIM_TYPE: ${{ secrets.RAG_ADMIN_JWT_ROLE_CLAIM_TYPE || 'cognito:groups' }}
         run: |
           set -euo pipefail
           # Gmail app passwords are often shown with spaces; strip all whitespace to avoid truncation/splitting.
