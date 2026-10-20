@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.0.104.5" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0" />
     <PackageReference Include="MongoDB.Driver" Version="3.11.0" />
     <PackageReference Include="Polly" Version="8.6.6" />
@@ -22,8 +23,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="HostedServices\DocumentIngestionWorker.cs" />
-    <Compile Remove="AI\Rag\IngestionInfrastructure.cs" />
     <Compile Remove="EventBus\RabbitMqIntegrationEventPublisher.cs" />
   </ItemGroup>
 

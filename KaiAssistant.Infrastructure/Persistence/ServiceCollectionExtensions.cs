@@ -19,6 +19,7 @@ using KaiAssistant.Infrastructure.AI.Embeddings;
 using KaiAssistant.Infrastructure.FeatureFlags;
 using KaiAssistant.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Amazon.S3;
 namespace KaiAssistant.Infrastructure.Persistence;
 public static class ServiceCollectionExtensions
 {
@@ -33,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.Configure<KnowledgeOptions>(configuration.GetSection(KnowledgeOptions.SectionName));
         services.Configure<EmbeddingOptions>(configuration.GetSection(EmbeddingOptions.SectionName));
         services.Configure<ConversationOptions>(configuration.GetSection(ConversationOptions.SectionName));
+        services.Configure<RagIngestionOptions>(configuration.GetSection(RagIngestionOptions.SectionName));
         services
             .AddGeminiAiServices(configuration)
             .AddEmailServices(configuration)
@@ -55,6 +57,29 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVectorStore, MongoVectorStore>();
         services.AddScoped<IKeywordSearch, MongoKeywordSearch>();
         services.AddScoped<IHybridRetriever, HybridRetriever>();
+        var ingestionOptions = configuration.GetSection(RagIngestionOptions.SectionName).Get<RagIngestionOptions>() ?? new RagIngestionOptions();
+        if (string.Equals(ingestionOptions.StorageProvider, "S3", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(ingestionOptions.S3Bucket))
+            {
+                throw new InvalidOperationException("RagIngestion:S3Bucket is required when S3 storage is selected.");
+            }
+            services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client());
+            services.AddScoped<IDocumentStorage, S3DocumentStorage>();
+        }
+        else if (string.Equals(ingestionOptions.StorageProvider, "Local", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IDocumentStorage, LocalDocumentStorage>();
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported RagIngestion:StorageProvider '{ingestionOptions.StorageProvider}'.");
+        }
+        services.AddScoped<IDocumentParser, TextDocumentParser>();
+        services.AddScoped<IKnowledgeDocumentStore, MongoKnowledgeDocumentStore>();
+        services.AddScoped<IIngestionJobStore, MongoIngestionJobStore>();
+        services.AddScoped<IDocumentIngestionService, DocumentIngestionService>();
+        services.AddScoped<IKnowledgeReindexService, KnowledgeReindexService>();
         services.AddSingleton<IRagContextSelector, RagContextSelector>();
         services.AddSingleton<IKnowledgeIndexStore, MongoKnowledgeIndexStore>();
         services.AddScoped<IConversationService, ConversationService>();
@@ -71,6 +96,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUnitOfWork, MongoUnitOfWork>();
         services.AddHostedService<MongoIndexInitializerHostedService>();
         services.AddHostedService<KnowledgeBootstrapHostedService>();
+        services.AddHostedService<DocumentIngestionWorker>();
         return services;
     }
 }

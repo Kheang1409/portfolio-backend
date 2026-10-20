@@ -15,5 +15,8 @@ public sealed class RagIngestionOptions
     [Range(10, 3600)] public int LeaseDurationSeconds { get; set; } = 120;
     [Range(1, 20)] public int MaxAttempts { get; set; } = 3;
     [Range(1, 3600)] public int RetryBaseDelaySeconds { get; set; } = 5;
+    public string StorageProvider { get; set; } = "Local";
+    public string? S3Bucket { get; set; }
+    public string S3KeyPrefix { get; set; } = "knowledge";
     public string[] AllowedMimeTypes { get; set; } = ["text/plain", "text/markdown", "application/json"];
 }
