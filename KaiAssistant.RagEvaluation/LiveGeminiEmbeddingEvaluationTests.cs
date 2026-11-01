@@ -56,58 +56,6 @@ public sealed class LiveGeminiEmbeddingEvaluationTests(ITestOutputHelper output)
         output.WriteLine("Recall@1={0:F3} Recall@5={1:F3} MRR={2:F3} mean-query={3:F1}ms p95={4:F1}ms", report.Recall1, report.Recall5, report.Mrr, report.MeanLatencyMs, report.P95LatencyMs);
     }
 
-    [Fact, Trait("Category", "LiveReindex")]
-    public async Task Gemini_index_can_be_staged_idempotently_without_activation()
-    {
-        if (!string.Equals(Environment.GetEnvironmentVariable("RUN_LIVE_EMBEDDING_REINDEX"), "1", StringComparison.Ordinal))
-        { output.WriteLine("Live Gemini reindex not requested. Set RUN_LIVE_EMBEDDING_REINDEX=1 to opt in."); return; }
-        var connection = Environment.GetEnvironmentVariable("MONGODB_CONNECTIONSTRING");
-        var databaseName = Environment.GetEnvironmentVariable("MONGODB_DATABASE");
-        if (string.IsNullOrWhiteSpace(connection) || string.IsNullOrWhiteSpace(databaseName)) throw new InvalidOperationException("MongoDB live reindex configuration is missing.");
-
-        var database = new MongoClient(connection).GetDatabase(databaseName);
-        var embeddingOptions = new EmbeddingOptions();
-        var embeddingMonitor = new FixedMonitor<EmbeddingOptions>(embeddingOptions);
-        var ragMonitor = new FixedMonitor<RagOptions>(new RagOptions { IndexVersion = "knowledge-v1" });
-        var indexStore = new MongoKnowledgeIndexStore(database, ragMonitor);
-        using var embeddings = new GeminiEmbeddingService(new SimpleHttpClientFactory(), embeddingMonitor,
-            new MemoryCache(new MemoryCacheOptions()), new ConfigurationBuilder().Build());
-        var vectors = new MongoVectorStore(database, indexStore);
-        var ingestion = new DocumentIngestionService(database, embeddings, vectors,
-            new FixedMonitor<RagIngestionOptions>(new RagIngestionOptions()), embeddingMonitor, NullLogger<DocumentIngestionService>.Instance);
-        var reindex = new KnowledgeReindexService(database, ingestion, indexStore, embeddingMonitor);
-
-        var beforeActive = await indexStore.GetActiveAsync();
-        var first = await reindex.StageAllAsync();
-        if (first.DocumentsTotal == 0)
-        {
-            Assert.False(first.ReadyForActivation);
-            Assert.Equal(beforeActive, await indexStore.GetActiveAsync());
-            output.WriteLine("index={0} documents=0 chunks=0 ready=False active-unchanged=True", first.IndexVersion);
-            return;
-        }
-        var stagedCollection = database.GetCollection<KnowledgeChunk>("knowledge_chunks");
-        var staged = await stagedCollection.Find(x => x.IndexVersion == embeddingOptions.IndexVersion).ToListAsync();
-        var second = await reindex.StageAllAsync();
-        var stagedAfterSecondPass = await stagedCollection.CountDocumentsAsync(x => x.IndexVersion == embeddingOptions.IndexVersion);
-        var afterActive = await indexStore.GetActiveAsync();
-
-        Assert.True(first.ReadyForActivation);
-        Assert.True(second.ReadyForActivation);
-        Assert.Equal(staged.Count, stagedAfterSecondPass);
-        Assert.Equal(beforeActive, afterActive);
-        Assert.All(staged, chunk =>
-        {
-            Assert.Equal(embeddingOptions.Provider, chunk.EmbeddingProvider);
-            Assert.Equal(embeddingOptions.Model, chunk.EmbeddingModel);
-            Assert.Equal(embeddingOptions.Version, chunk.EmbeddingPipelineVersion);
-            Assert.Equal(embeddingOptions.Dimensions, chunk.Embedding.Length);
-            Assert.All(chunk.Embedding, value => Assert.True(float.IsFinite(value)));
-        });
-        Assert.Equal(staged.Count, staged.Select(x => (x.DocumentId, x.ChunkIndex, x.EmbeddingPipelineVersion, x.IndexVersion)).Distinct().Count());
-        output.WriteLine("index={0} documents={1} completed={2} chunks={3} second-pass-count={4} active-unchanged={5}",
-            first.IndexVersion, first.DocumentsTotal, first.DocumentsCompleted, first.ChunksEmbedded, stagedAfterSecondPass, beforeActive == afterActive);
-    }
     private static double Cosine(float[] a, float[] b) { double dot=0, aa=0, bb=0; for(var i=0;i<a.Length;i++){dot+=a[i]*b[i];aa+=a[i]*a[i];bb+=b[i]*b[i];} return dot/(Math.Sqrt(aa)*Math.Sqrt(bb)); }
     private sealed class SimpleHttpClientFactory : IHttpClientFactory { private readonly HttpClient _client = new() { BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/") }; public HttpClient CreateClient(string name) => _client; }
 }

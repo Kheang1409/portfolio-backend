@@ -17,15 +17,10 @@ flowchart LR
     Orchestrator --> Conversation[Conversation history]
     Conversation --> Mongo
 
-    Admin[Authorized knowledge admin API] --> LocalFiles[Instance-local uploaded files]
-    Admin --> MongoJobs[MongoDB ingestion jobs]
-    Worker[Document ingestion worker] --> MongoJobs
-    Worker --> LocalFiles
-    Worker --> Mongo
-
     API --> Obs[OpenTelemetry + Serilog]
     Assistant --> Obs
     Rag --> Obs
+    Bootstrap[Resume knowledge bootstrap] --> Mongo
 ```
 
 The tool-calling prototype, semantic response cache, RabbitMQ publisher, and outbox worker are not wired into this active request path.

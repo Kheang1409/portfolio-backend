@@ -27,7 +27,7 @@ The resolved versions are above the patched floors identified by the GitHub advi
 
 ## Compatibility checks
 
-MongoDB persistence, ingestion, leasing, vector, and repository tests remain part of the solution test run. API startup was exercised against the configured MongoDB instance; Swagger generation returned `200` and retained `/api/assistant`. Knowledge administration routes are included in the API and protected by JWT Bearer plus the `RagAdmin` role policy.
+MongoDB persistence, vector retrieval, and repository tests remain part of the solution test run. API startup was exercised against the configured MongoDB instance; Swagger generation returned `200` and retained `/api/assistant`.
 
 The OpenTelemetry packages are intentionally upgraded as one family. The existing meters and activities remain registered, and API startup completed with the 1.16.0 runtime.
 
@@ -48,4 +48,4 @@ The complete solution passed with 64 normal tests, 3 intentional skips, and 15 R
 
 ## Remaining work
 
-Container scanning and a CI policy gate are not yet wired to a provider-specific scanner. The existing multi-stage, non-root Dockerfile remains unchanged. RAG activation remains blocked independently because the configured corpus is empty.
+Container scanning and a CI policy gate are not yet wired to a provider-specific scanner. The existing multi-stage, non-root Dockerfile remains unchanged.

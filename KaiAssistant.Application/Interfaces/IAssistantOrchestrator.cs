@@ -12,7 +12,6 @@ public interface IAssistantOrchestrator
 public class OrchestratorDiagnostics
 {
     public long LastLatencyMs { get; set; }
-    public double CacheHitRate { get; set; }
     public int ActiveStreamCount { get; set; }
     public DateTimeOffset LastAiCallAt { get; set; }
 }

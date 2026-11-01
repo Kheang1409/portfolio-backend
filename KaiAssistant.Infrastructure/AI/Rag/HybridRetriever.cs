@@ -28,7 +28,7 @@ internal static class QueryTerms
     }
 }
 
-public sealed class MongoKeywordSearch(IMongoDatabase database, IKnowledgeIndexStore indexes) : IKeywordSearch
+public sealed class MongoKeywordSearch(IMongoDatabase database, IOptionsMonitor<RagOptions> ragOptions) : IKeywordSearch
 {
     private readonly IMongoCollection<KnowledgeChunk> _chunks = database.GetCollection<KnowledgeChunk>("knowledge_chunks");
     private readonly IMongoCollection<KnowledgeDocument> _documents = database.GetCollection<KnowledgeDocument>("knowledge_base_documents");
@@ -40,12 +40,11 @@ public sealed class MongoKeywordSearch(IMongoDatabase database, IKnowledgeIndexS
         var activeIds = await _documents.Find(x => x.Status == "Completed" || x.Status == "Indexed")
             .Project(x => x.Id).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (activeIds.Count == 0) return [];
-        var activeIndex = await indexes.GetActiveAsync(cancellationToken).ConfigureAwait(false);
         var patterns = terms.Select(term => new MongoDB.Bson.BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(term), "i")).ToArray();
         var content = Builders<KnowledgeChunk>.Filter.Or(patterns.SelectMany(pattern => new[] {
             Builders<KnowledgeChunk>.Filter.Regex(x => x.Content, pattern), Builders<KnowledgeChunk>.Filter.Regex(x => x.Title, pattern), Builders<KnowledgeChunk>.Filter.Regex(x => x.Source, pattern) }));
         var filter = Builders<KnowledgeChunk>.Filter.In(x => x.DocumentId, activeIds!) &
-            Builders<KnowledgeChunk>.Filter.Eq(x => x.IndexVersion, activeIndex.IndexVersion) & content;
+            Builders<KnowledgeChunk>.Filter.Eq(x => x.IndexVersion, ragOptions.CurrentValue.IndexVersion) & content;
         var chunks = await _chunks.Find(filter).Limit(500).ToListAsync(cancellationToken).ConfigureAwait(false);
         return chunks.Select(chunk => new RetrievedChunk(chunk.Id ?? string.Empty, chunk.DocumentId, chunk.Content, 0,
                 terms.Count(term => chunk.Content.Contains(term, StringComparison.OrdinalIgnoreCase) || chunk.Title.Contains(term, StringComparison.OrdinalIgnoreCase) || chunk.Source.Contains(term, StringComparison.OrdinalIgnoreCase)), 0, 0, chunk.Metadata))
@@ -83,7 +82,7 @@ public static class ReciprocalRankFusion
 }
 
 public sealed class HybridRetriever(IEmbeddingService embeddings, IVectorStore vectors, IKeywordSearch keywords,
-    IKnowledgeIndexStore indexes, IOptionsMonitor<EmbeddingOptions> embeddingOptions, IOptionsMonitor<RagOptions> options) : IHybridRetriever
+    IOptionsMonitor<EmbeddingOptions> embeddingOptions, IOptionsMonitor<RagOptions> options) : IHybridRetriever
 {
     private static readonly Meter Meter = new("KaiAssistant.Rag", "1.0.0");
     private static readonly Histogram<double> SemanticDuration = Meter.CreateHistogram<double>("semantic_search_duration", "ms");
@@ -122,17 +121,16 @@ public sealed class HybridRetriever(IEmbeddingService embeddings, IVectorStore v
         var keywordDuration = TimeSpan.Zero;
         if (strategy is not RetrievalStrategy.Keyword)
         {
-            var active = await indexes.GetActiveAsync(cancellationToken).ConfigureAwait(false);
             var provider = embeddingOptions.CurrentValue;
-            if (string.Equals(active.EmbeddingProvider, provider.Provider, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(active.EmbeddingVersion, provider.Version, StringComparison.OrdinalIgnoreCase) && active.Dimensions == provider.Dimensions)
+            var activeVersion = options.CurrentValue.IndexVersion;
+            if (string.Equals("gemini", provider.Provider, StringComparison.OrdinalIgnoreCase) && provider.Dimensions == 768)
             {
                 var watch = Stopwatch.StartNew();
                 try
                 {
                     var embedding = await embeddings.GenerateEmbeddingAsync(query, EmbeddingPurpose.RetrievalQuery, cancellationToken: cancellationToken).ConfigureAwait(false);
                     semantic = await vectors.SearchAsync(new VectorSearchRequest(embedding, config.SemanticCandidateCount, config.MinSimilarity,
-                        new Dictionary<string,string> { ["indexVersion"] = active.IndexVersion, ["embeddingPipelineVersion"] = active.EmbeddingVersion }), cancellationToken).ConfigureAwait(false);
+                        new Dictionary<string, string> { ["indexVersion"] = activeVersion, ["embeddingPipelineVersion"] = provider.Version }), cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception) when (!cancellationToken.IsCancellationRequested && strategy is not RetrievalStrategy.Semantic) { semantic = []; }
                 semanticDuration = watch.Elapsed; SemanticDuration.Record(semanticDuration.TotalMilliseconds);

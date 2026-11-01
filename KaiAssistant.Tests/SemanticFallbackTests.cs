@@ -24,12 +24,10 @@ public sealed class SemanticFallbackTests
         var keywords = new Mock<IKeywordSearch>();
         keywords.Setup(x => x.SearchAsync("MongoDB", 20, It.IsAny<CancellationToken>())).ReturnsAsync([
             new RetrievedChunk("chunk", "doc", "MongoDB durable state", 0, 1, 0, 1, new Dictionary<string,string>())]);
-        var indexes = new Mock<IKnowledgeIndexStore>();
-        indexes.Setup(x => x.GetActiveAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new KnowledgeIndexDescriptor("v2", "gemini", "gemini-embedding-001", "gemini-v1", 768));
         var embeddingOptions = new Mock<IOptionsMonitor<EmbeddingOptions>>();
         embeddingOptions.SetupGet(x => x.CurrentValue).Returns(new EmbeddingOptions { Version = "gemini-v1", IndexVersion = "v2" });
         var ragOptions = new Mock<IOptionsMonitor<RagOptions>>(); ragOptions.SetupGet(x => x.CurrentValue).Returns(new RagOptions());
-        var retriever = new HybridRetriever(embeddings.Object, vectors.Object, keywords.Object, indexes.Object, embeddingOptions.Object, ragOptions.Object);
+        var retriever = new HybridRetriever(embeddings.Object, vectors.Object, keywords.Object, embeddingOptions.Object, ragOptions.Object);
 
         var result = await retriever.DiagnoseAsync("MongoDB", RetrievalStrategy.Hybrid);
 

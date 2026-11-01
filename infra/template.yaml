@@ -60,20 +60,34 @@ Parameters:
     NoEcho: true
     Description: Google Gemini API key
 
-  RagAdminJwtAuthority:
+  PayPalClientId:
     Type: String
-    MinLength: 1
-    Description: HTTPS issuer URL for admin JWT validation
+    Default: ""
+    Description: PayPal REST application client ID (public identifier)
 
-  RagAdminJwtAudience:
+  PayPalClientSecret:
     Type: String
-    MinLength: 1
-    Description: Expected audience claim for admin JWTs
+    NoEcho: true
+    Default: ""
+    Description: PayPal REST application client secret
 
-  RagAdminJwtRoleClaimType:
+  PayPalEnvironment:
     Type: String
-    Default: cognito:groups
-    Description: Claim type containing the RagAdmin role
+    Default: sandbox
+    AllowedValues:
+      - sandbox
+      - live
+    Description: PayPal environment; use sandbox until verification is complete
+
+  PayPalWebhookId:
+    Type: String
+    Default: ""
+    Description: PayPal webhook ID for signature verification
+
+  PayPalMerchantId:
+    Type: String
+    Default: ""
+    Description: Optional expected PayPal merchant ID for capture validation
 
   SmtpEnabled:
     Type: String
@@ -168,11 +182,6 @@ Resources:
       Handler: KaiAssistant.API
       CodeUri: ../KaiAssistant.API/
       Description: KaiAssistant API Lambda Function
-      Policies:
-        - S3ReadPolicy:
-            BucketName: !Ref KnowledgeDocumentsBucket
-        - S3WritePolicy:
-            BucketName: !Ref KnowledgeDocumentsBucket
       Environment:
         Variables:
           MONGODB_CONNECTIONSTRING: !Ref MongoConnectionString
@@ -187,9 +196,11 @@ Resources:
           SMTP_SENDER_PASSWORD: !Ref SmtpSenderPassword
           SMTP_ENABLED: !Ref SmtpEnabled
           GEMINI_API_KEY: !Ref GeminiApiKey
-          RAGADMINAUTHENTICATION__AUTHORITY: !Ref RagAdminJwtAuthority
-          RAGADMINAUTHENTICATION__AUDIENCE: !Ref RagAdminJwtAudience
-          RAGADMINAUTHENTICATION__ROLECLAIMTYPE: !Ref RagAdminJwtRoleClaimType
+          PayPal__ClientId: !Ref PayPalClientId
+          PayPal__ClientSecret: !Ref PayPalClientSecret
+          PayPal__Environment: !Ref PayPalEnvironment
+          PayPal__WebhookId: !Ref PayPalWebhookId
+          PayPal__MerchantId: !Ref PayPalMerchantId
           GEMINI_MODEL_NAMES: !Ref GeminiModelNames
           GEMINI_ENDPOINT: !Ref GeminiEndpoint
           GEMINI_SYSTEM_PROMPT: !Ref GeminiSystemPrompt
@@ -200,9 +211,6 @@ Resources:
           GEMINI_TOPP: !Ref GeminiTopP
           GEMINI_MAX_OUTPUT_TOKENS: !Ref GeminiMaxOutputTokens
           GEMINI_CANDIDATE_COUNT: !Ref GeminiCandidateCount
-          RAGINGESTION__STORAGEPROVIDER: S3
-          RAGINGESTION__S3BUCKET: !Ref KnowledgeDocumentsBucket
-          RAGINGESTION__S3KEYPREFIX: knowledge
           GEMINI_TOP_CHUNKS: !Ref GeminiTopChunks
           GEMINISETTINGS__LASTSUCCESSFULMODELCACHETTLSECONDS: !Ref GeminiLastSuccessfulModelCacheTtlSeconds
           GEMINISETTINGS__SKIPRETRYDELAYTHRESHOLDSECONDS: !Ref GeminiSkipRetryDelayThresholdSeconds
@@ -215,21 +223,6 @@ Resources:
             Path: /{proxy+}
             Method: ANY
             ApiId: !Ref KaiAssistantApi
-
-  KnowledgeDocumentsBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Properties:
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
 
   KaiAssistantApi:
     Type: AWS::Serverless::HttpApi

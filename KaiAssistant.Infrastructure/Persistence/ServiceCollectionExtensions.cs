@@ -9,17 +9,17 @@ using KaiAssistant.Domain.Interfaces.Repositories;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
 using KaiAssistant.Application.Services;
+using KaiAssistant.Application.Donations;
 using KaiAssistant.Infrastructure.Governance;
 using KaiAssistant.Infrastructure.AI;
-using KaiAssistant.Infrastructure.AI.Caching;
 using KaiAssistant.Infrastructure.AI.Conversation;
 using KaiAssistant.Infrastructure.AI.Providers;
-using KaiAssistant.Infrastructure.AI.Rag;
 using KaiAssistant.Infrastructure.AI.Embeddings;
+using KaiAssistant.Infrastructure.AI.Rag;
 using KaiAssistant.Infrastructure.FeatureFlags;
+using KaiAssistant.Infrastructure.Payments;
 using KaiAssistant.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Amazon.S3;
 namespace KaiAssistant.Infrastructure.Persistence;
 public static class ServiceCollectionExtensions
 {
@@ -29,12 +29,11 @@ public static class ServiceCollectionExtensions
         services.Configure<AiGovernanceOptions>(configuration.GetSection(AiGovernanceOptions.SectionName));
         services.Configure<FeatureFlagsOptions>(configuration.GetSection(FeatureFlagsOptions.SectionName));
         services.Configure<AiModelOrchestrationOptions>(configuration.GetSection(AiModelOrchestrationOptions.SectionName));
-        services.Configure<SemanticCacheOptions>(configuration.GetSection(SemanticCacheOptions.SectionName));
         services.Configure<RagOptions>(configuration.GetSection(RagOptions.SectionName));
         services.Configure<KnowledgeOptions>(configuration.GetSection(KnowledgeOptions.SectionName));
         services.Configure<EmbeddingOptions>(configuration.GetSection(EmbeddingOptions.SectionName));
         services.Configure<ConversationOptions>(configuration.GetSection(ConversationOptions.SectionName));
-        services.Configure<RagIngestionOptions>(configuration.GetSection(RagIngestionOptions.SectionName));
+        services.Configure<PayPalOptions>(configuration.GetSection(PayPalOptions.SectionName));
         services
             .AddGeminiAiServices(configuration)
             .AddEmailServices(configuration)
@@ -49,39 +48,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICacheService>(sp => sp.GetRequiredService<RedisCacheService>());
         services.AddSingleton<ICacheDiagnosticsService>(sp => sp.GetRequiredService<RedisCacheService>());
         services.AddSingleton<IAiUsageGuard, AiUsageGuard>();
+        services.AddHttpClient("PayPal", client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddScoped<IDonationService, PayPalDonationService>();
         services.AddSingleton<IPromptSecurityService, PromptSecurityService>();
         services.AddHttpClient("GeminiEmbeddings", client => client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/"));
         services.AddSingleton<IEmbeddingService, GeminiEmbeddingService>();
-        services.AddScoped<ISemanticCacheService, SemanticCacheService>();
         services.AddScoped<IRagService, RagService>();
         services.AddScoped<IVectorStore, MongoVectorStore>();
         services.AddScoped<IKeywordSearch, MongoKeywordSearch>();
         services.AddScoped<IHybridRetriever, HybridRetriever>();
-        var ingestionOptions = configuration.GetSection(RagIngestionOptions.SectionName).Get<RagIngestionOptions>() ?? new RagIngestionOptions();
-        if (string.Equals(ingestionOptions.StorageProvider, "S3", StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(ingestionOptions.S3Bucket))
-            {
-                throw new InvalidOperationException("RagIngestion:S3Bucket is required when S3 storage is selected.");
-            }
-            services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client());
-            services.AddScoped<IDocumentStorage, S3DocumentStorage>();
-        }
-        else if (string.Equals(ingestionOptions.StorageProvider, "Local", StringComparison.OrdinalIgnoreCase))
-        {
-            services.AddScoped<IDocumentStorage, LocalDocumentStorage>();
-        }
-        else
-        {
-            throw new InvalidOperationException($"Unsupported RagIngestion:StorageProvider '{ingestionOptions.StorageProvider}'.");
-        }
-        services.AddScoped<IDocumentParser, TextDocumentParser>();
-        services.AddScoped<IKnowledgeDocumentStore, MongoKnowledgeDocumentStore>();
-        services.AddScoped<IIngestionJobStore, MongoIngestionJobStore>();
-        services.AddScoped<IDocumentIngestionService, DocumentIngestionService>();
-        services.AddScoped<IKnowledgeReindexService, KnowledgeReindexService>();
         services.AddSingleton<IRagContextSelector, RagContextSelector>();
-        services.AddSingleton<IKnowledgeIndexStore, MongoKnowledgeIndexStore>();
         services.AddScoped<IConversationService, ConversationService>();
         services.AddScoped<IAiEvaluationService, AiEvaluationService>();
         services.AddScoped<IAiProvider, GeminiProvider>();
@@ -95,8 +71,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped(typeof(IRepository<>), typeof(MongoRepository<>));
         services.AddScoped<IUnitOfWork, MongoUnitOfWork>();
         services.AddHostedService<MongoIndexInitializerHostedService>();
+        services.AddHostedService<DonationReceiptOutboxWorker>();
         services.AddHostedService<KnowledgeBootstrapHostedService>();
-        services.AddHostedService<DocumentIngestionWorker>();
         return services;
     }
 }

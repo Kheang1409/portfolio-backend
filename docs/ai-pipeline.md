@@ -21,8 +21,6 @@ Retrieved material remains untrusted data. Source identity is retained through s
 
 - The active assistant uses exact response caching, not semantic response reuse.
 - The active prompt-level key includes the question, conversation history, selected resume/RAG context, and request context.
-- The outer orchestrator response cache is intentionally not used for chat because it cannot account for retrieved evidence.
-- `SemanticCacheService` is registered but is not called from the active assistant request path.
 
 ## Model selection and fallback
 

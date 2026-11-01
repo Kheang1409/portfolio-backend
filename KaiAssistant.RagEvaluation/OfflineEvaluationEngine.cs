@@ -10,11 +10,11 @@ public static class OfflineEvaluationEngine
 {
     public static readonly (string Id, string Text)[] Corpus =
     [
-        ("project:kaiassistant-api", "KaiAssistant API orchestrates multiple AI providers with timeout control and fallback behavior. It supports RAG, semantic cache, conversation memory, and streaming outputs."),
-        ("project:outbox-reliability", "Outbox processor leases pending events, enforces idempotency with Redis, retries using backoff, and dead-letters messages after max attempts."),
-        ("project:observability", "Observability includes OpenTelemetry traces, structured logs, and dashboard-ready metrics for request latency, fallback rates, cache hits, and outbox throughput."),
-        ("architecture:clean-architecture", "Domain stays isolated, application exposes abstractions, infrastructure implements integrations, and API remains a thin transport layer."),
-        ("scalability:runtime", "The service can run on Lambda with horizontal elasticity, using Redis for distributed control paths and MongoDB for durable state and retrieval operations.")
+        ("project:api-runtime", "The application serves HTTP requests, validates input, streams responses, and applies configured timeouts."),
+        ("project:event-processing", "A background processor claims pending events, prevents duplicate work, retries with backoff, and moves exhausted events to a dead-letter queue."),
+        ("project:telemetry", "Operational telemetry combines traces, structured logs, and metrics for latency, failures, and throughput."),
+        ("architecture:layers", "The domain layer is isolated, the application layer defines abstractions, infrastructure implements integrations, and the API is a thin transport layer."),
+        ("scalability:deployment", "The service supports horizontal scaling with distributed coordination and durable database storage.")
     ];
     private static readonly HashSet<string> StopWords = new(["the","and","for","with","what","which","does","has","have","how","kai","used","use","that","this","from","about","into","was","were","are","its"], StringComparer.Ordinal);
     private static readonly Dictionary<string,string[]> Expansions = new(StringComparer.Ordinal) { ["graphed"]=["dashboard","metrics"], ["signals"]=["metrics"], ["long-lived"]=["durable"], ["information"]=["state"], ["database"]=["mongodb"] };
@@ -56,7 +56,7 @@ public static class OfflineEvaluationEngine
     }
     private static RetrievedChunk Chunk((string Id, string Text) x, double keyword, double fused, int rank) =>
         new(x.Id + ":0", x.Id, x.Text, 0, keyword, fused, rank, Metadata(x.Id));
-    private static Dictionary<string,string> Metadata(string id) => new() { ["source"] = id, ["title"] = id, ["version"] = "1", ["indexVersion"] = "knowledge-v1" };
+    private static Dictionary<string,string> Metadata(string id) => new() { ["source"] = id, ["title"] = id, ["version"] = "1", ["indexVersion"] = "evaluation-v1" };
     private static string[] Terms(string query)
     {
         var terms = query.Split([' ', '\t', '\r', '\n', ',', '.', '?', '!', ':', ';'], StringSplitOptions.RemoveEmptyEntries)

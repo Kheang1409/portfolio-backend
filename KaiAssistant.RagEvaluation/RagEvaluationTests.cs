@@ -19,15 +19,6 @@ public sealed class RagEvaluationTests(ITestOutputHelper output)
         cases.Should().Contain(x => x.Split == "tuning").And.Contain(x => x.Split == "holdout");
     }
 
-    [Fact]
-    public void Semantic_challenge_set_detects_sha_projection_limitation()
-    {
-        var cases = SemanticChallengeDataset.Load();
-        cases.Should().HaveCount(10);
-        var deterministic = RetrievalMetrics.Summarize("SHA projection", cases.Select(x => OfflineEvaluationEngine.Run(x, RetrievalStrategy.Semantic)).ToArray());
-        deterministic.Recall5.Should().BeLessThan(.5);
-    }
-
     [Theory]
     [InlineData(RetrievalStrategy.Keyword)]
     [InlineData(RetrievalStrategy.Semantic)]

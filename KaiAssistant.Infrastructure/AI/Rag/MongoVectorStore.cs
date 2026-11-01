@@ -1,12 +1,12 @@
-using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Rag;
+using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Domain.Entities.AI;
 using MongoDB.Driver;
 
 namespace KaiAssistant.Infrastructure.AI.Rag;
 
 /// <summary>Portable vector-store implementation backed by the existing Mongo collection.</summary>
-public sealed class MongoVectorStore(IMongoDatabase database, IKnowledgeIndexStore indexes) : IVectorStore
+public sealed class MongoVectorStore(IMongoDatabase database) : IVectorStore
 {
     private readonly IMongoCollection<KnowledgeChunk> _chunks = database.GetCollection<KnowledgeChunk>("knowledge_chunks");
     private readonly IMongoCollection<KnowledgeDocument> _documents = database.GetCollection<KnowledgeDocument>("knowledge_base_documents");
@@ -28,10 +28,10 @@ public sealed class MongoVectorStore(IMongoDatabase database, IKnowledgeIndexSto
             ChunkIndex = record.Metadata.TryGetValue("chunkIndex", out var index) && int.TryParse(index, out var parsed) ? parsed : 0
         };
         chunk.EmbeddingDimensions = record.Embedding.Length;
-        chunk.EmbeddingProvider = record.Metadata.TryGetValue("embeddingProvider", out var provider) ? provider : "deterministic";
-        chunk.EmbeddingModel = record.Metadata.TryGetValue("embeddingModel", out var model) ? model : "sha256-projection";
-        chunk.EmbeddingPipelineVersion = record.Metadata.TryGetValue("embeddingPipelineVersion", out var pipeline) ? pipeline : "embedding-v1";
-        chunk.IndexVersion = record.Metadata.TryGetValue("indexVersion", out var version) ? version : "knowledge-v1";
+        chunk.EmbeddingProvider = record.Metadata.TryGetValue("embeddingProvider", out var provider) ? provider : string.Empty;
+        chunk.EmbeddingModel = record.Metadata.TryGetValue("embeddingModel", out var model) ? model : string.Empty;
+        chunk.EmbeddingPipelineVersion = record.Metadata.TryGetValue("embeddingPipelineVersion", out var pipeline) ? pipeline : string.Empty;
+        chunk.IndexVersion = record.Metadata.TryGetValue("indexVersion", out var version) ? version : string.Empty;
         await _chunks.ReplaceOneAsync(x => x.Id == record.Id, chunk, new ReplaceOptions { IsUpsert = true }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -44,11 +44,14 @@ public sealed class MongoVectorStore(IMongoDatabase database, IKnowledgeIndexSto
         var activeIds = await _documents.Find(x => x.Status == "Completed" || x.Status == "Indexed")
             .Project(x => x.Id).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (activeIds.Count == 0) return [];
-        var active = await indexes.GetActiveAsync(cancellationToken).ConfigureAwait(false);
-        if (request.Embedding.Length != active.Dimensions) throw new InvalidOperationException($"Query embedding has {request.Embedding.Length} dimensions; active index requires {active.Dimensions}.");
+        var activeDimensions = request.Embedding.Length;
+        var embeddingVersion = request.MetadataFilter is not null && request.MetadataFilter.TryGetValue("embeddingPipelineVersion", out var version)
+            ? version
+            : string.Empty;
         var candidates = await _chunks.Find(Builders<KnowledgeChunk>.Filter.In(x => x.DocumentId, activeIds!) &
-            Builders<KnowledgeChunk>.Filter.Eq(x => x.IndexVersion, active.IndexVersion) &
-            Builders<KnowledgeChunk>.Filter.Eq(x => x.EmbeddingDimensions, active.Dimensions))
+            Builders<KnowledgeChunk>.Filter.Eq(x => x.IndexVersion, request.MetadataFilter is not null && request.MetadataFilter.TryGetValue("indexVersion", out var indexVersion) ? indexVersion : string.Empty) &
+            Builders<KnowledgeChunk>.Filter.Eq(x => x.EmbeddingDimensions, activeDimensions) &
+            Builders<KnowledgeChunk>.Filter.Eq(x => x.EmbeddingPipelineVersion, embeddingVersion))
             .Limit(500).ToListAsync(cancellationToken).ConfigureAwait(false);
         return candidates.Where(x => Matches(x, request.MetadataFilter))
             .Select(x => new VectorSearchResult(ToRecord(x), VectorMath.CosineSimilarity(request.Embedding, x.Embedding)))

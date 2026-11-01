@@ -29,7 +29,3 @@
 - Structured logs include correlation and trace context.
 - OpenTelemetry spans expose nested operation timings.
 - Dashboard-ready counters/histograms capture fallback rates, cache behavior, and outbox health.
-
-## Ingestion job recovery
-
-Transient ingestion failures return jobs to `Queued` with exponential backoff and jitter. Jobs exceeding `MaxAttempts` become `DeadLetter` with bounded diagnostic error text. A worker crash leaves a lease that expires, allowing another worker to recover the job. This recovery applies to Mongo job state; AWS SAM stores uploaded files in shared S3, while local storage is instance-local.

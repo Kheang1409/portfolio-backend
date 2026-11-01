@@ -15,7 +15,7 @@ public class AiPromptBuilder : IAiPromptBuilder
     public string BuildSystemPrompt()
     {
         var basePrompt = string.IsNullOrWhiteSpace(_options.Value.SystemPrompt)
-            ? "You are Mr Taing's professional AI assistant. Represent Kheang professionally and help visitors learn about his background, skills, and experience."
+            ? "You are a professional portfolio assistant. Help visitors learn about the profile, skills, and experience provided in retrieved portfolio data."
             : _options.Value.SystemPrompt;
         var guardrails = @"
         STYLE RULES:
