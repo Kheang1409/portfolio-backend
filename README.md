@@ -1,7 +1,7 @@
 # KaiAssistant API
 
 > Runtime note: the assistant builds searchable knowledge from the latest resume stored in MongoDB. Contact and visit data are also persisted in MongoDB. RabbitMQ/outbox publishing is not part of the active startup path.
-KaiAssistant API is the .NET 10 backend for the portfolio app.
+> KaiAssistant API is the .NET 10 backend for the portfolio app.
 
 It focuses on the routes and services that the frontend actually uses:
 
@@ -23,7 +23,6 @@ query -> keyword retrieval -> strong evidence -> bounded context -> Gemini strea
 `KnowledgeBootstrapHostedService` runs once at startup. It hashes the latest resume content, skips unchanged data, writes keyword chunks to MongoDB, and optionally creates Gemini embeddings. Embedding failures keep keyword knowledge usable.
 
 Retrieved content is explicitly marked as untrusted reference data in the model prompt. System and application policy instructions take precedence over both user input and retrieved text.
-
 
 Real semantic embeddings use Gemini `gemini-embedding-001` at 768 dimensions. Configure `GEMINI_API_KEY` to enable semantic retrieval. During an embedding outage, retrieval falls back to keyword evidence. See [docs/embedding-strategy.md](docs/embedding-strategy.md).
 
@@ -187,14 +186,15 @@ curl http://localhost:5000/health/live
 - If cache-related flows fail, confirm Redis is reachable and `REDIS__CONNECTIONSTRING` points to the right instance.
 - If `/ops/*` routes return 404 in production, confirm ops are enabled in configuration.
 - If the assistant does not remember prior chat in local testing, verify requests include `context.metadata.sessionId` and that MongoDB is reachable.
+
 # PayPal donation checkout
 
 Donation payments use the PayPal Orders v2 API. The browser receives only the PayPal client ID and redirects/card entry remain inside PayPal Checkout; this application never receives card numbers, security codes, or expiration values. PayPal may show eligible cards based on account approval, buyer region, and transaction risk; “all cards” cannot be guaranteed by the application.
 
 ## Sandbox setup
 
-1. Create a PayPal Developer Sandbox REST app and configure backend-only `PayPal__ClientId` and `PayPal__ClientSecret` secrets. Keep `PayPal__Environment=sandbox`.
-2. Set `PayPal__Currency`, donation minimum/maximum, optional `PayPal__MerchantId`, `PayPal__WebhookId`, and `PayPal__EmailRetentionDays` in backend configuration. Configure SMTP through the existing `SMTP_*` settings if optional receipts are desired.
+1. Create a PayPal Developer Sandbox REST app and configure backend-only `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` secrets. Keep `PAYPAL_ENVIRONMENT=sandbox`.
+2. Set `PayPal__Currency`, donation minimum/maximum, optional `PAYPAL_MERCHANT_ID`, `PAYPAL_WEBHOOK_ID`, and `PAYPAL_EMAIL_RETENTION_DAYS` in backend configuration. Configure SMTP through the existing `SMTP_*` settings if optional receipts are desired.
 3. Add the HTTPS endpoint `{API_BASE_URL}/api/donations/webhook` to the matching Sandbox REST app. Subscribe to `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED`, and `PAYMENT.CAPTURE.REVERSED`, then store its generated webhook ID as `PayPal__WebhookId`.
 4. Run the frontend and backend locally, use Sandbox buyer accounts/cards, and verify the order, capture, leaderboard opt-in, and receipt outbox. Do not use live credentials or real payments for automated tests.
 

@@ -196,11 +196,11 @@ Resources:
           SMTP_SENDER_PASSWORD: !Ref SmtpSenderPassword
           SMTP_ENABLED: !Ref SmtpEnabled
           GEMINI_API_KEY: !Ref GeminiApiKey
-          PayPal__ClientId: !Ref PayPalClientId
-          PayPal__ClientSecret: !Ref PayPalClientSecret
-          PayPal__Environment: !Ref PayPalEnvironment
-          PayPal__WebhookId: !Ref PayPalWebhookId
-          PayPal__MerchantId: !Ref PayPalMerchantId
+          PAYPAL_CLIENT_ID: !Ref PayPalClientId
+          PAYPAL_CLIENT_SECRET: !Ref PayPalClientSecret
+          PAYPAL_ENVIRONMENT: !Ref PayPalEnvironment
+          PAYPAL_WEBHOOK_ID: !Ref PayPalWebhookId
+          PAYPAL_MERCHANT_ID: !Ref PayPalMerchantId
           GEMINI_MODEL_NAMES: !Ref GeminiModelNames
           GEMINI_ENDPOINT: !Ref GeminiEndpoint
           GEMINI_SYSTEM_PROMPT: !Ref GeminiSystemPrompt
