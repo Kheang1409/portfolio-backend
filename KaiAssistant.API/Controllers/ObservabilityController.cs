@@ -6,19 +6,16 @@ namespace KaiAssistant.API.Controllers;
 public class ObservabilityController : ControllerBase
 {
     private readonly IAssistantOrchestrator _orchestrator;
-    private readonly IResponseCacheService _responseCache;
     private readonly IObservabilityService _observability;
     private readonly IVisitTrackingService _visitTracking;
     private readonly ILogger<ObservabilityController> _logger;
     public ObservabilityController(
         IAssistantOrchestrator orchestrator,
-        IResponseCacheService responseCache,
         IObservabilityService observability,
         IVisitTrackingService visitTracking,
         ILogger<ObservabilityController> logger)
     {
         _orchestrator = orchestrator;
-        _responseCache = responseCache;
         _observability = observability;
         _visitTracking = visitTracking;
         _logger = logger;
@@ -28,7 +25,6 @@ public class ObservabilityController : ControllerBase
     public async Task<IActionResult> GetDiagnostics(CancellationToken cancellationToken)
     {
         var orchestratorDiags = await _orchestrator.GetDiagnosticsAsync(cancellationToken).ConfigureAwait(false);
-        var (hits, misses, hitRate) = await _responseCache.GetMetricsAsync(cancellationToken).ConfigureAwait(false);
         return Ok(new
         {
             timestamp = DateTimeOffset.UtcNow,
@@ -38,12 +34,6 @@ public class ObservabilityController : ControllerBase
                 lastCallAt = orchestratorDiags.LastAiCallAt,
                 activeStreamCount = orchestratorDiags.ActiveStreamCount
             },
-            cache = new
-            {
-                hitRate = orchestratorDiags.CacheHitRate,
-                totalHits = hits,
-                totalMisses = misses
-            }
         });
     }
     [HttpGet("health")]

@@ -1,14 +1,5 @@
 namespace KaiAssistant.Application.Rag;
 
-public sealed record DocumentIngestionRequest(
-    string Source,
-    string Title,
-    string Content,
-    string MimeType = "text/plain",
-    IReadOnlyDictionary<string, string>? Metadata = null);
-
-public sealed record DocumentIngestionResult(string DocumentId, bool AlreadyIndexed, int ChunkCount);
-
 public sealed record VectorRecord(
     string Id,
     string DocumentId,

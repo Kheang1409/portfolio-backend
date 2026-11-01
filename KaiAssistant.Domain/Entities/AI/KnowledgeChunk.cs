@@ -15,11 +15,11 @@ public sealed class KnowledgeChunk
     public string ContentHash { get; set; } = string.Empty;
     public int ChunkIndex { get; set; }
     public float[] Embedding { get; set; } = Array.Empty<float>();
-    public string EmbeddingProvider { get; set; } = "deterministic";
-    public string EmbeddingModel { get; set; } = "sha256-projection";
-    public int EmbeddingDimensions { get; set; } = 64;
-    public string EmbeddingPipelineVersion { get; set; } = "embedding-v1";
-    public string IndexVersion { get; set; } = "knowledge-v1";
+    public string EmbeddingProvider { get; set; } = string.Empty;
+    public string EmbeddingModel { get; set; } = string.Empty;
+    public int EmbeddingDimensions { get; set; }
+    public string EmbeddingPipelineVersion { get; set; } = string.Empty;
+    public string IndexVersion { get; set; } = "knowledge-gemini-001-v2";
     public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }

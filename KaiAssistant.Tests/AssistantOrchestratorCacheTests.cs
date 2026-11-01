@@ -19,9 +19,6 @@ public sealed class AssistantOrchestratorCacheTests
     [Fact]
     public async Task Orchestrator_does_not_use_context_blind_outer_response_cache()
     {
-        var responseCache = new Mock<IResponseCacheService>();
-        responseCache.Setup(x => x.GetCachedResponseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("stale cached answer");
 
         var contextBuilder = new Mock<IAssistantContextBuilder>();
         contextBuilder.Setup(x => x.BuildContextAsync(
@@ -48,8 +45,6 @@ public sealed class AssistantOrchestratorCacheTests
         var orchestrator = new AssistantOrchestrator(
             assistant.Object,
             contextBuilder.Object,
-            responseCache.Object,
-            Mock.Of<ITokenBudgetService>(),
             Mock.Of<IConversationRepository>(),
             Mock.Of<ILogger<AssistantOrchestrator>>());
 
@@ -57,12 +52,6 @@ public sealed class AssistantOrchestratorCacheTests
         {
         }
 
-        responseCache.Verify(x => x.GetCachedResponseAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        responseCache.Verify(x => x.CacheResponseAsync(
-            It.IsAny<string>(),
-            It.IsAny<string>(),
-            It.IsAny<TimeSpan>(),
-            It.IsAny<CancellationToken>()), Times.Never);
         assistant.Verify(x => x.StreamAsync(
             "question",
             It.IsAny<ConversationMessage[]>(),

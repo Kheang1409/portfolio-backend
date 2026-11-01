@@ -1,11 +1,10 @@
 using KaiAssistant.Domain.Entities.Outbox;
 using KaiAssistant.Domain.Entities.Resumes;
 using KaiAssistant.Domain.Entities.Visitors;
+using KaiAssistant.Domain.Entities.Donations;
 using KaiAssistant.Domain.Entities.AI;
-using KaiAssistant.Infrastructure.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using MongoDB.Bson;
 using MongoDB.Driver;
 namespace KaiAssistant.Infrastructure.Mongo;
 public sealed class MongoIndexInitializerHostedService : IHostedService
@@ -24,12 +23,10 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
         var resumeCollection = _database.GetCollection<Resume>("resumes");
         var outboxCollection = _database.GetCollection<OutboxMessage>("outbox_messages");
         var visitorCollection = _database.GetCollection<VisitorEvent>("visitorevents");
-        var modelHealthCollection = _database.GetCollection<ModelHealthStateDocument>("assistant_model_health");
-        var cacheCollection = _database.GetCollection<CachedPrompt>("cached_prompts");
-        var knowledgeCollection = _database.GetCollection<KnowledgeDocument>("knowledge_base_documents");
-        var knowledgeChunks = _database.GetCollection<KnowledgeChunk>("knowledge_chunks");
-        var ingestionJobs = _database.GetCollection<IngestionJob>("ingestion_jobs");
         var conversationCollection = _database.GetCollection<Conversation>("ai_conversations");
+        var donationCollection = _database.GetCollection<Donation>("donations");
+        var donationEventCollection = _database.GetCollection<DonationWebhookEvent>("donation_webhook_events");
+        var donationReceiptCollection = _database.GetCollection<DonationReceiptOutbox>("donation_receipt_outbox");
         var resumeIndexes = new[]
         {
             new CreateIndexModel<Resume>(
@@ -64,34 +61,6 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
                     .Ascending(x => x.NextAttemptAtUtc),
                 new CreateIndexOptions { Name = "ix_outbox_retry_scheduling" })
         };
-        var semanticCacheIndexes = new[]
-        {
-            new CreateIndexModel<CachedPrompt>(
-                Builders<CachedPrompt>.IndexKeys.Descending(x => x.CreatedAt),
-                new CreateIndexOptions { Name = "ix_cache_created_desc" }),
-            new CreateIndexModel<CachedPrompt>(
-                Builders<CachedPrompt>.IndexKeys.Ascending(x => x.Prompt),
-                new CreateIndexOptions { Name = "ix_cache_prompt" })
-        };
-        var knowledgeIndexes = new[]
-        {
-            new CreateIndexModel<KnowledgeDocument>(
-                Builders<KnowledgeDocument>.IndexKeys.Ascending(x => x.ContentHash),
-                new CreateIndexOptions { Name = "ix_knowledge_content_hash", Unique = true }),
-            new CreateIndexModel<KnowledgeDocument>(
-                Builders<KnowledgeDocument>.IndexKeys.Ascending(x => x.Source),
-                new CreateIndexOptions { Name = "ix_knowledge_source" })
-        };
-        var knowledgeChunkIndexes = new[]
-        {
-            new CreateIndexModel<KnowledgeChunk>(Builders<KnowledgeChunk>.IndexKeys.Ascending(x => x.DocumentId).Ascending(x => x.ChunkIndex), new CreateIndexOptions { Name = "ix_knowledge_chunk_document" }),
-            new CreateIndexModel<KnowledgeChunk>(Builders<KnowledgeChunk>.IndexKeys.Ascending(x => x.ContentHash), new CreateIndexOptions { Name = "ix_knowledge_chunk_content_hash" })
-        };
-        var ingestionJobIndexes = new[]
-        {
-            new CreateIndexModel<IngestionJob>(Builders<IngestionJob>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.NextAttemptAtUtc), new CreateIndexOptions { Name = "ix_ingestion_job_eligible" }),
-            new CreateIndexModel<IngestionJob>(Builders<IngestionJob>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.LeaseExpiresAtUtc), new CreateIndexOptions { Name = "ix_ingestion_job_lease" })
-        };
         var conversationIndexes = new[]
         {
             new CreateIndexModel<Conversation>(
@@ -100,24 +69,6 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
             new CreateIndexModel<Conversation>(
                 Builders<Conversation>.IndexKeys.Descending(x => x.UpdatedAt),
                 new CreateIndexOptions { Name = "ix_conversation_updated_desc" })
-        };
-        var modelHealthIndexes = new[]
-        {
-            new CreateIndexModel<ModelHealthStateDocument>(
-                Builders<ModelHealthStateDocument>.IndexKeys.Ascending(x => x.ModelName),
-                new CreateIndexOptions { Name = "ix_model_health_model_name", Unique = true }),
-            new CreateIndexModel<ModelHealthStateDocument>(
-                Builders<ModelHealthStateDocument>.IndexKeys.Ascending(x => x.CircuitOpenUntilUtc),
-                new CreateIndexOptions { Name = "ix_model_health_circuit_open_until" }),
-            new CreateIndexModel<ModelHealthStateDocument>(
-                Builders<ModelHealthStateDocument>.IndexKeys.Descending(x => x.UpdatedAtUtc),
-                new CreateIndexOptions { Name = "ix_model_health_updated_desc" }),
-            new CreateIndexModel<ModelHealthStateDocument>(
-                Builders<ModelHealthStateDocument>.IndexKeys.Descending(x => x.DynamicScore),
-                new CreateIndexOptions { Name = "ix_model_health_dynamic_score_desc" }),
-            new CreateIndexModel<ModelHealthStateDocument>(
-                Builders<ModelHealthStateDocument>.IndexKeys.Descending(x => x.TotalEstimatedCostUsd),
-                new CreateIndexOptions { Name = "ix_model_health_total_cost_desc" })
         };
         var visitorIndexes = new[]
         {
@@ -133,56 +84,20 @@ public sealed class MongoIndexInitializerHostedService : IHostedService
         };
         await resumeCollection.Indexes.CreateManyAsync(resumeIndexes, cancellationToken).ConfigureAwait(false);
         await outboxCollection.Indexes.CreateManyAsync(outboxIndexes, cancellationToken).ConfigureAwait(false);
-        await cacheCollection.Indexes.CreateManyAsync(semanticCacheIndexes, cancellationToken).ConfigureAwait(false);
-        await knowledgeCollection.Indexes.CreateManyAsync(knowledgeIndexes, cancellationToken).ConfigureAwait(false);
-        await knowledgeChunks.Indexes.CreateManyAsync(knowledgeChunkIndexes, cancellationToken).ConfigureAwait(false);
-        await ingestionJobs.Indexes.CreateManyAsync(ingestionJobIndexes, cancellationToken).ConfigureAwait(false);
         await conversationCollection.Indexes.CreateManyAsync(conversationIndexes, cancellationToken).ConfigureAwait(false);
-        await modelHealthCollection.Indexes.CreateManyAsync(modelHealthIndexes, cancellationToken).ConfigureAwait(false);
         await visitorCollection.Indexes.CreateManyAsync(visitorIndexes, cancellationToken).ConfigureAwait(false);
-        await TryCreateVectorSearchIndexAsync("cached_prompts", "ix_cache_embedding_vector", cancellationToken).ConfigureAwait(false);
-        await TryCreateVectorSearchIndexAsync("knowledge_base_documents", "ix_knowledge_embedding_vector", cancellationToken).ConfigureAwait(false);
-        await TryCreateVectorSearchIndexAsync("knowledge_chunks", "ix_knowledge_chunk_embedding_vector", cancellationToken).ConfigureAwait(false);
+        await donationCollection.Indexes.CreateManyAsync([
+            new CreateIndexModel<Donation>(Builders<Donation>.IndexKeys.Ascending(x => x.PayPalOrderId), new CreateIndexOptions { Name = "ux_donations_paypal_order", Unique = true }),
+            new CreateIndexModel<Donation>(Builders<Donation>.IndexKeys.Ascending(x => x.IdempotencyKey), new CreateIndexOptions { Name = "ux_donations_idempotency", Unique = true, Sparse = true }),
+            new CreateIndexModel<Donation>(Builders<Donation>.IndexKeys.Descending(x => x.Status).Descending(x => x.ShowOnLeaderboard).Descending(x => x.Amount).Ascending(x => x.PaidAtUtc), new CreateIndexOptions { Name = "ix_donations_leaderboard" })
+        ], cancellationToken).ConfigureAwait(false);
+        await donationEventCollection.Indexes.CreateOneAsync(new CreateIndexModel<DonationWebhookEvent>(Builders<DonationWebhookEvent>.IndexKeys.Ascending(x => x.EventId), new CreateIndexOptions { Name = "ux_donation_webhook_event", Unique = true }), cancellationToken: cancellationToken).ConfigureAwait(false);
+        await donationReceiptCollection.Indexes.CreateManyAsync([
+            new CreateIndexModel<DonationReceiptOutbox>(Builders<DonationReceiptOutbox>.IndexKeys.Ascending(x => x.DonationId), new CreateIndexOptions { Name = "ux_donation_receipt_donation", Unique = true }),
+            new CreateIndexModel<DonationReceiptOutbox>(Builders<DonationReceiptOutbox>.IndexKeys.Ascending(x => x.SentAtUtc).Ascending(x => x.NextAttemptAtUtc), new CreateIndexOptions { Name = "ix_donation_receipt_pending" }),
+            new CreateIndexModel<DonationReceiptOutbox>(Builders<DonationReceiptOutbox>.IndexKeys.Ascending(x => x.RetainUntilUtc), new CreateIndexOptions { Name = "ttl_donation_receipt_retention", ExpireAfter = TimeSpan.Zero })
+        ], cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Mongo indexes initialized.");
     }
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    private async Task TryCreateVectorSearchIndexAsync(string collection, string indexName, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var command = new BsonDocument
-            {
-                ["createSearchIndexes"] = collection,
-                ["indexes"] = new BsonArray
-                {
-                    new BsonDocument
-                    {
-                        ["name"] = indexName,
-                        ["definition"] = new BsonDocument
-                        {
-                            ["mappings"] = new BsonDocument
-                            {
-                                ["dynamic"] = false,
-                                ["fields"] = new BsonDocument
-                                {
-                                    ["Embedding"] = new BsonDocument
-                                    {
-                                        ["type"] = "knnVector",
-                                        ["dimensions"] = 64,
-                                        ["similarity"] = "cosine"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-            await _database.RunCommandAsync<BsonDocument>(command, cancellationToken: cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("Mongo vector search index ensured. Collection={Collection} Index={IndexName}", collection, indexName);
-        }
-        catch (MongoCommandException ex)
-        {
-            _logger.LogWarning(ex, "Vector search index creation skipped for collection {Collection}.", collection);
-        }
-    }
 }

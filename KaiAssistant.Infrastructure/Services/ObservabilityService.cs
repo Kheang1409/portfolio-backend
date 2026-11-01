@@ -13,7 +13,6 @@ public sealed class ObservabilityService : IObservabilityService
     private readonly ConcurrentDictionary<string, long> _metrics = new();
     private readonly IRedisConnectionFactory _redisFactory;
     private readonly IAssistantOrchestrator _orchestrator;
-    private readonly ICacheDiagnosticsService _cacheDiagnostics;
     private readonly IVisitTrackingService _visitTracking;
     private readonly ILogger<ObservabilityService> _logger;
     private const int MaxLatencyHistorySize = 1000;
@@ -21,13 +20,11 @@ public sealed class ObservabilityService : IObservabilityService
     public ObservabilityService(
         IRedisConnectionFactory redisFactory,
         IAssistantOrchestrator orchestrator,
-        ICacheDiagnosticsService cacheDiagnostics,
         IVisitTrackingService visitTracking,
         ILogger<ObservabilityService> logger)
     {
         _redisFactory = redisFactory;
         _orchestrator = orchestrator;
-        _cacheDiagnostics = cacheDiagnostics;
         _visitTracking = visitTracking;
         _logger = logger;
     }
@@ -41,14 +38,6 @@ public sealed class ObservabilityService : IObservabilityService
             var data = new SystemObservabilityData
             {
                 Timestamp = DateTimeOffset.UtcNow,
-                // Cache metrics
-                Cache = new CacheMetrics
-                {
-                    HitRatio = _cacheDiagnostics.HitRatio,
-                    TotalHits = _cacheDiagnostics.HitCount,
-                    TotalMisses = _cacheDiagnostics.MissCount,
-                    AvgRetrievalMs = diagnostics.LastLatencyMs
-                },
                 // AI performance
                 AiPerformance = new AiPerformanceMetrics
                 {
@@ -175,7 +164,7 @@ public sealed class ObservabilityService : IObservabilityService
     {
         if (diagnostics.LastLatencyMs > 10000)
             return "critical";
-        if (diagnostics.LastLatencyMs > 5000 || diagnostics.CacheHitRate < 0.3)
+        if (diagnostics.LastLatencyMs > 5000)
             return "degraded";
         return "healthy";
     }

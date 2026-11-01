@@ -37,4 +37,4 @@ sequenceDiagram
     A-->>C: NDJSON events
 ```
 
-The outer orchestrator response cache is not used for chat because it cannot account for retrieved evidence. The active flow also does not invoke `SemanticCacheService`, cross-provider fallback, or model-directed tool calls.
+The active flow does not invoke cross-provider fallback or model-directed tool calls.

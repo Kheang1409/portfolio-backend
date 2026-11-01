@@ -271,6 +271,14 @@ return {1, 0}
     }
     private EndpointRateLimitRule ResolveRule(PathString path)
     {
+        if (path.StartsWithSegments("/api/donations/webhook", StringComparison.OrdinalIgnoreCase))
+        {
+            return new EndpointRateLimitRule { Name = "paypal-webhook", PathContains = "/api/donations/webhook", PermitLimit = 120, WindowSeconds = 60 };
+        }
+        if (path.StartsWithSegments("/api/donations", StringComparison.OrdinalIgnoreCase))
+        {
+            return new EndpointRateLimitRule { Name = "donations", PathContains = "/api/donations", PermitLimit = 8, WindowSeconds = 60 };
+        }
         if (_options.EndpointRules is null || _options.EndpointRules.Length == 0)
         {
             return new EndpointRateLimitRule

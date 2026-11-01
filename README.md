@@ -1,7 +1,6 @@
 # KaiAssistant API
 
-> Runtime note: the active assistant uses repository-corpus, keyword-first RAG with optional semantic retrieval and a prompt/context-aware exact response cache. Mongo-backed ingestion services and a worker are registered. Local development defaults to instance-local storage; AWS SAM production uses a private, encrypted S3 bucket. Knowledge administration uses JWT Bearer with a required `RagAdmin` role. RabbitMQ/outbox publishing is not part of the active startup path.
-
+> Runtime note: the assistant builds searchable knowledge from the latest resume stored in MongoDB. Contact and visit data are also persisted in MongoDB. RabbitMQ/outbox publishing is not part of the active startup path.
 KaiAssistant API is the .NET 10 backend for the portfolio app.
 
 It focuses on the routes and services that the frontend actually uses:
@@ -14,26 +13,19 @@ It focuses on the routes and services that the frontend actually uses:
 
 ## Retrieval and knowledge
 
-The assistant uses repository-owned portfolio knowledge from `docs/rag-corpus/`.
+The assistant builds searchable knowledge from the latest resume document stored in MongoDB.
 
 ```text
 query -> keyword retrieval -> strong evidence -> bounded context -> Gemini stream
                            weak evidence -> semantic fallback
 ```
 
-`KnowledgeBootstrapHostedService` runs once at startup. It hashes supported corpus files, skips unchanged sources, writes keyword chunks to MongoDB, and optionally creates Gemini embeddings for changed content. Embedding failures keep keyword knowledge usable.
-
-`IDocumentIngestionService` is idempotent on a normalized SHA-256 content hash. It normalizes text, splits near sentence boundaries with configurable overlap, generates embeddings, and writes chunks and vectors. Configure `RagIngestion:StorageProvider` as `Local` or `S3`; S3 requires `RagIngestion:S3Bucket` and uses the AWS SDK credential chain. Local development stores files under `App_Data/knowledge`. AWS SAM provisions a private encrypted bucket and grants the Lambda role read/write access.
-
-Knowledge upload and index-management routes require a JWT whose issuer and audience match `RagAdminAuthentication:Authority` and `RagAdminAuthentication:Audience`, and whose configured role claim contains `RagAdmin`. Set `RagAdminAuthentication:RoleClaimType` if the identity provider uses a claim name other than `role`. Production startup rejects missing or non-HTTPS issuer configuration.
-
-For AWS SAM deployments, configure the GitHub Actions repository secrets `RAG_ADMIN_JWT_AUTHORITY` and `RAG_ADMIN_JWT_AUDIENCE`; `RAG_ADMIN_JWT_ROLE_CLAIM_TYPE` defaults to Cognito's `cognito:groups` claim. The workflow validates that issuer and audience are present HTTPS URLs before starting deployment. For Cognito, the authority must match the pool issuer exactly, and the audience URL must be configured as a resource binding so it appears in the access token's `aud` claim. Local development can set the corresponding `RAGADMINAUTHENTICATION__AUTHORITY`, `RAGADMINAUTHENTICATION__AUDIENCE`, and `RAGADMINAUTHENTICATION__ROLECLAIMTYPE` environment variables.
+`KnowledgeBootstrapHostedService` runs once at startup. It hashes the latest resume content, skips unchanged data, writes keyword chunks to MongoDB, and optionally creates Gemini embeddings. Embedding failures keep keyword knowledge usable.
 
 Retrieved content is explicitly marked as untrusted reference data in the model prompt. System and application policy instructions take precedence over both user input and retrieved text.
 
-Retrieval quality is regression-tested offline across keyword, semantic, hybrid, and reranked modes. Run `dotnet test KaiAssistant.RagEvaluation/KaiAssistant.RagEvaluation.csproj --no-restore`; measured baselines and interpretation are in [docs/rag-evaluation.md](docs/rag-evaluation.md).
 
-Real semantic embeddings use Gemini `gemini-embedding-001` at 768 dimensions. Configure `GEMINI_API_KEY`, then stage and evaluate the versioned index before activation. Until a compatible Gemini index is active—or during a transient embedding outage—retrieval safely uses keyword evidence. See [docs/embedding-strategy.md](docs/embedding-strategy.md).
+Real semantic embeddings use Gemini `gemini-embedding-001` at 768 dimensions. Configure `GEMINI_API_KEY` to enable semantic retrieval. During an embedding outage, retrieval falls back to keyword evidence. See [docs/embedding-strategy.md](docs/embedding-strategy.md).
 
 Dependency auditing and supply-chain decisions are documented in [docs/dependency-security.md](docs/dependency-security.md).
 
@@ -179,10 +171,8 @@ curl http://localhost:5000/health/live
 - `docs/architecture.md`
 - `docs/ai-pipeline.md`
 - `docs/rag-architecture.md`
-- `docs/rag-evaluation.md`
 - `docs/embedding-strategy.md`
 - `docs/corpus-management.md`
-- `docs/rag-corpus-manifest.json`
 - `docs/scalability.md`
 - `docs/resilience.md`
 - `docs/tradeoffs.md`
@@ -197,3 +187,19 @@ curl http://localhost:5000/health/live
 - If cache-related flows fail, confirm Redis is reachable and `REDIS__CONNECTIONSTRING` points to the right instance.
 - If `/ops/*` routes return 404 in production, confirm ops are enabled in configuration.
 - If the assistant does not remember prior chat in local testing, verify requests include `context.metadata.sessionId` and that MongoDB is reachable.
+# PayPal donation checkout
+
+Donation payments use the PayPal Orders v2 API. The browser receives only the PayPal client ID and redirects/card entry remain inside PayPal Checkout; this application never receives card numbers, security codes, or expiration values. PayPal may show eligible cards based on account approval, buyer region, and transaction risk; “all cards” cannot be guaranteed by the application.
+
+## Sandbox setup
+
+1. Create a PayPal Developer Sandbox REST app and configure backend-only `PayPal__ClientId` and `PayPal__ClientSecret` secrets. Keep `PayPal__Environment=sandbox`.
+2. Set `PayPal__Currency`, donation minimum/maximum, optional `PayPal__MerchantId`, `PayPal__WebhookId`, and `PayPal__EmailRetentionDays` in backend configuration. Configure SMTP through the existing `SMTP_*` settings if optional receipts are desired.
+3. Add the HTTPS endpoint `{API_BASE_URL}/api/donations/webhook` to the matching Sandbox REST app. Subscribe to `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED`, and `PAYMENT.CAPTURE.REVERSED`, then store its generated webhook ID as `PayPal__WebhookId`.
+4. Run the frontend and backend locally, use Sandbox buyer accounts/cards, and verify the order, capture, leaderboard opt-in, and receipt outbox. Do not use live credentials or real payments for automated tests.
+
+## Production deployment
+
+Store PayPal and SMTP secrets in AWS Secrets Manager/SSM or the deployment platform's secret store; SAM `NoEcho` parameters are only a deployment input and can still be exposed through poorly controlled stack access, so prefer dynamic secret references for production. Apply MongoDB indexes by deploying the API and allowing its index initializer to run (or apply the same index definitions in a controlled migration window). Ensure the database supports unique indexes. Configure a production HTTPS webhook URL and the Live app webhook ID. Switch `PayPal__Environment=live` only after Sandbox verification and PayPal merchant/card eligibility approval; deploy matching Live client ID, secret, merchant ID and webhook ID together. Never place the client secret in frontend or `NEXT_PUBLIC_*` configuration.
+
+Private receipt email addresses are retained separately from the public leaderboard and are deleted from the donation record after successful delivery. The receipt outbox retains its delivery record/email for `PayPal__EmailRetentionDays` to support retries; the collection TTL index removes expired jobs. Keep database backups and access policies within the same retention/privacy policy. The worker is hosted in the API process; for Lambda deployment, validate the runtime's background execution window and configure a scheduled invoker if email retries must continue while no requests are arriving.

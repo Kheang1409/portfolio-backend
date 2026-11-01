@@ -84,7 +84,20 @@ public sealed class SmtpEmailService : IEmailService
             textBody: textBody,
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
-    private async Task SendEmailAsync(
+    public async Task<bool> SendDonationReceiptAsync(string name, string email, decimal amount, string currency, CancellationToken cancellationToken = default)
+    {
+        if (!_emailSettings.Enabled)
+        {
+            _logger.LogInformation("Email delivery is disabled; skipping donation receipt.");
+            return false;
+        }
+        var safeName = HtmlEncode(string.IsNullOrWhiteSpace(name) ? "friend" : name);
+        var amountText = amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        return await SendEmailAsync(email, "Thank you for your support",
+            $"<p>Hello {safeName},</p><p>Thank you for your donation of {HtmlEncode(currency)} {amountText}. Your payment was processed securely by PayPal.</p>",
+            $"Hello {name},\n\nThank you for your donation of {currency} {amountText}. Your payment was processed securely by PayPal.", cancellationToken).ConfigureAwait(false);
+    }
+    private async Task<bool> SendEmailAsync(
         string recipient,
         string subject,
         string htmlBody,
@@ -94,11 +107,11 @@ public sealed class SmtpEmailService : IEmailService
         if (string.IsNullOrWhiteSpace(recipient))
         {
             _logger.LogWarning("Skipping email send for subject {Subject} because the recipient address is empty.", subject);
-            return;
+            return false;
         }
         try
         {
-            _logger.LogInformation("Starting email send for {Recipient} with subject {Subject}. Timeout: {TimeoutMs}ms", recipient, subject, 10000);
+            _logger.LogInformation("Starting email send for subject {Subject}. Timeout: {TimeoutMs}ms", subject, 10000);
             await _sendPolicy.ExecuteAsync(async ct =>
             {
                 using var mail = new MailMessage
@@ -119,26 +132,23 @@ public sealed class SmtpEmailService : IEmailService
                     DeliveryMethod = SmtpDeliveryMethod.Network,
                     Timeout = 30000
                 };
-                _logger.LogInformation("SMTP client configured - attempting to send email to {Recipient} via {SmtpServer}:{Port} with SSL={UseSSL}.", recipient, _emailSettings.SmtpServer, _emailSettings.Port, _emailSettings.Port == 465 || _emailSettings.Port == 587);
+                _logger.LogInformation("SMTP client configured - attempting email delivery via {SmtpServer}:{Port} with SSL={UseSSL}.", _emailSettings.SmtpServer, _emailSettings.Port, _emailSettings.Port == 465 || _emailSettings.Port == 587);
 #if NET10_0_OR_GREATER
                 await smtp.SendMailAsync(mail, ct).ConfigureAwait(false);
 #else
                 ct.ThrowIfCancellationRequested();
                 await smtp.SendMailAsync(mail).ConfigureAwait(false);
 #endif
-                _logger.LogInformation("Email successfully sent to {Recipient} with subject {Subject}.", recipient, subject);
+                _logger.LogInformation("Email successfully sent with subject {Subject}.", subject);
                 _resilience.RecordSuccess("email");
             }, cancellationToken).ConfigureAwait(false);
+            return true;
         }
         catch (Exception ex)
         {
-            _resilience.RecordFailure("email", ex.Message);
-            _logger.LogError(ex, "Email send failed for subject {Subject}. Exception type: {ExceptionType}, Message: {Message}. Continuing without surfacing the failure to the contact form.", subject, ex.GetType().Name, ex.Message);
-            // Log inner exceptions if available
-            if (ex.InnerException != null)
-            {
-                _logger.LogError(ex.InnerException, "Inner exception details: {InnerExceptionType}: {InnerMessage}", ex.InnerException.GetType().Name, ex.InnerException.Message);
-            }
+            _resilience.RecordFailure("email", "SMTP delivery failed");
+            _logger.LogError("Email send failed for subject {Subject}. Exception type: {ExceptionType}.", subject, ex.GetType().Name);
+            return false;
         }
     }
     private static string BuildOwnerNotificationHtml(string name, string email, string messageText, DateTime utcNow)
@@ -284,11 +294,11 @@ public sealed class SmtpEmailService : IEmailService
                             <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;">
                                 <tr>
                                     <td style="padding:14px 16px; border:1px solid #bae6fd; border-radius:12px; background:linear-gradient(180deg,#f0f9ff 0%,#e0f2fe 100%); font-size:13px; color:#0c4a6e;">
-                                        Connect with me on <a href="https://github.com/Kheang1409" style="color:#0284c7; text-decoration:none; font-weight:700;">GitHub</a> to see my latest projects.
+                                        Visit the portfolio to learn more about recent projects.
                                     </td>
                                 </tr>
                             </table>
-                            <p style="margin:20px 0 0; font-size:14px; line-height:1.75; color:#334155;">Best regards,<br><strong style="color:#0f172a;">Hang Kheang Taing</strong></p>
+                            <p style="margin:20px 0 0; font-size:14px; line-height:1.75; color:#334155;">Best regards,<br><strong style="color:#0f172a;">Portfolio team</strong></p>
                         </td>
                     </tr>
                     <tr>
@@ -334,10 +344,9 @@ public sealed class SmtpEmailService : IEmailService
         sb.AppendLine();
         sb.AppendLine("Connect with me:");
         sb.AppendLine("Portfolio: https://kaitaing.netlify.app");
-        sb.AppendLine("GitHub: https://github.com/Kheang1409");
         sb.AppendLine();
         sb.AppendLine("Best regards,");
-        sb.AppendLine("Hang Kheang Taing");
+        sb.AppendLine("Portfolio team");
         return sb.ToString();
     }
     private static string HtmlEncode(string value) => WebUtility.HtmlEncode(value ?? string.Empty);

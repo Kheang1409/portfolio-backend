@@ -47,20 +47,17 @@ builder.Services.AddOpenTelemetry()
     })
     .WithMetrics(mb => mb
         .AddMeter("KaiAssistant.AssistantService")
-        .AddMeter("KaiAssistant.Cache")
         .AddMeter("KaiAssistant.Resume")
         .AddMeter("KaiAssistant.AiGovernance")
         .AddMeter("KaiAssistant.ApiEndpoints")
         .AddMeter("KaiAssistant.RateLimiting")
         .AddMeter("KaiAssistant.Redis")
         .AddMeter("KaiAssistant.Rag")
-        .AddMeter("KaiAssistant.Embeddings")
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation());
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAiOrchestration(builder.Configuration);
-builder.Services.AddRagAdminAuthentication(builder.Configuration);
 builder.Services.AddConfiguredCors(builder.Configuration);
 builder.Services.AddMemoryCache();
 builder.Services.AddOutputCache();
@@ -92,10 +89,6 @@ builder.Services.AddOptions<AiStreamingOptions>()
     .Bind(builder.Configuration.GetSection(AiStreamingOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.Services.AddOptions<SemanticCacheOptions>()
-    .Bind(builder.Configuration.GetSection(SemanticCacheOptions.SectionName))
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
 builder.Services.AddOptions<RagOptions>()
     .Bind(builder.Configuration.GetSection(RagOptions.SectionName))
     .ValidateDataAnnotations()
@@ -112,6 +105,13 @@ builder.Services.AddOptions<ConversationOptions>()
 builder.Services.AddOptions<OpsSecurityOptions>()
     .Bind(builder.Configuration.GetSection(OpsSecurityOptions.SectionName))
     .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<KaiAssistant.Infrastructure.Payments.PayPalOptions>()
+    .Bind(builder.Configuration.GetSection(KaiAssistant.Infrastructure.Payments.PayPalOptions.SectionName))
+    .Validate(options => string.IsNullOrWhiteSpace(options.Environment) || options.Environment is "sandbox" or "live", "PayPal Environment must be sandbox or live.")
+    .Validate(options => options.MinimumDonation > 0 && options.MaximumDonation >= options.MinimumDonation, "PayPal donation limits are invalid.")
+    .Validate(options => string.IsNullOrWhiteSpace(options.MerchantId) || options.MerchantId.Length <= 64, "PayPal merchant ID is invalid.")
+    .Validate(options => options.EmailRetentionDays >= 1 && options.EmailRetentionDays <= 3650, "PayPal email retention must be 1 to 3650 days.")
     .ValidateOnStart();
 builder.Services.AddOptions<LoadTestHooksOptions>()
     .Bind(builder.Configuration.GetSection(LoadTestHooksOptions.SectionName))
@@ -161,8 +161,6 @@ app.UseResponseCompression();
 app.UseOutputCache();
 app.UseMiddleware<RedisRateLimitingMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
-app.UseAuthentication();
-app.UseAuthorization();
 var httpsUrlConfigured = builder.Configuration.GetSection("Kestrel").Exists() ||
                          (builder.Configuration["ASPNETCORE_URLS"]?.Contains("https://") ?? false);
 if (httpsUrlConfigured)
@@ -210,14 +208,6 @@ static void ValidateCriticalConfiguration(IConfiguration configuration, IHostEnv
     if (string.IsNullOrWhiteSpace(mongoConn) || string.IsNullOrWhiteSpace(mongoDb))
     {
         throw new InvalidOperationException("MongoDB configuration is required in production.");
-    }
-    var ragAdminAuthority = configuration["RagAdminAuthentication:Authority"];
-    var ragAdminAudience = configuration["RagAdminAuthentication:Audience"];
-    if (!Uri.TryCreate(ragAdminAuthority, UriKind.Absolute, out var authorityUri) ||
-        !string.Equals(authorityUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
-        string.IsNullOrWhiteSpace(ragAdminAudience))
-    {
-        throw new InvalidOperationException("RagAdminAuthentication requires an HTTPS Authority and an Audience in production.");
     }
     var aiGovernance = configuration.GetSection(AiGovernanceOptions.SectionName).Get<AiGovernanceOptions>() ?? new AiGovernanceOptions();
     if (aiGovernance.Enabled)

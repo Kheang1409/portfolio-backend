@@ -17,8 +17,7 @@ public sealed class VectorDimensionTests
     public async Task Vector_store_rejects_metadata_dimension_mismatch()
     {
         var database = new Mock<IMongoDatabase>();
-        var indexes = new Mock<IKnowledgeIndexStore>();
-        var store = new MongoVectorStore(database.Object, indexes.Object);
+        var store = new MongoVectorStore(database.Object);
         var metadata = new Dictionary<string,string> { ["embeddingDimensions"]="768" };
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.UpsertAsync(new VectorRecord("id", "doc", "text", new float[64], metadata)));
     }

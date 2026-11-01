@@ -2,14 +2,14 @@
 
 ## High-Level Overview
 
-KaiAssistant is a .NET 10 portfolio assistant backend with layered architecture, MongoDB persistence, Gemini integration, and operational controls. Production capacity and multi-instance ingestion depend on deployment-specific shared storage and infrastructure.
+KaiAssistant is a .NET 10 portfolio assistant backend with layered architecture, MongoDB persistence, Gemini integration, and operational controls. Portfolio content and assistant retrieval are sourced from MongoDB resume records.
 
 Core runtime flow:
 
 1. Request enters API middleware pipeline.
 2. Request is validated, correlated, and rate-limited.
 3. Assistant application service executes AI flow.
-4. Infrastructure integrations provide RAG, response caching, Gemini model selection, and persistence.
+4. Infrastructure integrations provide RAG, response caching, Gemini model selection, and MongoDB persistence.
 5. Response is returned with structured telemetry and trace context.
 
 ## Clean Architecture
@@ -43,10 +43,8 @@ Core runtime flow:
 - AssistantController: single streaming endpoint for assistant chat.
 - AssistantService: builds prompts from conversation, resume, and RAG context before Gemini model generation.
 - ModelOrchestrator and GeminiGateway: model selection and Gemini request execution.
-- ToolRegistry and EnhancedAssistantOrchestrator are not registered by active startup; tool execution is not part of chat.
+- AssistantOrchestrator coordinates the active chat request.
 - RagService: retrieval of relevant knowledge snippets.
-- SemanticCacheService: registered but not called from the active assistant request path.
 - ConversationService: short-term memory and summary rollover.
-- DocumentIngestionWorker: Mongo-backed processing of queued knowledge ingestion jobs; uploaded file storage is currently instance-local.
 - RedisRateLimitingMiddleware: distributed request throttling.
 - GlobalExceptionMiddleware: consistent API error contracts.

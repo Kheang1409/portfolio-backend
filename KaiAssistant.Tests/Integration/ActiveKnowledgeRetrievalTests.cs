@@ -6,7 +6,8 @@ using MongoDB.Driver;
 using Xunit;
 using System;
 using System.Threading.Tasks;
-using KaiAssistant.Application.Interfaces;
+using KaiAssistant.Application.Options;
+using Microsoft.Extensions.Options;
 using Moq;
 
 namespace KaiAssistant.Tests.Integration;
@@ -26,12 +27,12 @@ public sealed class ActiveKnowledgeRetrievalTests
             new KnowledgeDocument { Id = activeId, Source = "active", Status = "Completed", ContentHash = "active" },
             new KnowledgeDocument { Id = archivedId, Source = "old", Status = "Archived", ContentHash = "old" }]);
         await chunks.InsertManyAsync([
-            new KnowledgeChunk { Id = ObjectId.GenerateNewId().ToString(), DocumentId = activeId, Content = "MongoDB durable state", Source = "active", Title = "Runtime", Metadata = new() { ["source"]="active", ["title"]="Runtime", ["version"]="2" } },
+            new KnowledgeChunk { Id = ObjectId.GenerateNewId().ToString(), DocumentId = activeId, Content = "MongoDB durable state", Source = "active", Title = "Runtime", IndexVersion = "knowledge-gemini-001-v2", Metadata = new() { ["source"]="active", ["title"]="Runtime", ["version"]="2" } },
             new KnowledgeChunk { Id = ObjectId.GenerateNewId().ToString(), DocumentId = archivedId, Content = "MongoDB legacy state", Source = "old", Title = "Legacy", Metadata = new() { ["source"]="old", ["title"]="Legacy", ["version"]="1" } }]);
 
-        var indexStore = new Mock<IKnowledgeIndexStore>();
-        indexStore.Setup(x => x.GetActiveAsync(default)).ReturnsAsync(new KnowledgeIndexDescriptor("knowledge-v1", "deterministic", "sha256-projection", "embedding-v1", 64));
-        var result = await new MongoKeywordSearch(database, indexStore.Object).SearchAsync("MongoDB", 10);
+        var options = new Mock<IOptionsMonitor<RagOptions>>();
+        options.SetupGet(x => x.CurrentValue).Returns(new RagOptions { IndexVersion = "knowledge-gemini-001-v2" });
+        var result = await new MongoKeywordSearch(database, options.Object).SearchAsync("MongoDB", 10);
 
         result.Should().ContainSingle();
         result[0].DocumentId.Should().Be(activeId);

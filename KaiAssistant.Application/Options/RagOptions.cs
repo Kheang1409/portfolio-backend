@@ -24,5 +24,5 @@ public sealed class RagOptions
     [Range(0, 1)] public double MinimumEvidenceScore { get; set; } = 0.01;
     [Range(0.5, 1)] public double NearDuplicateThreshold { get; set; } = 0.85;
     [Required] public string PipelineVersion { get; set; } = "rag-v1";
-    [Required] public string IndexVersion { get; set; } = "knowledge-v1";
+    [Required] public string IndexVersion { get; set; } = "knowledge-gemini-001-v2";
 }

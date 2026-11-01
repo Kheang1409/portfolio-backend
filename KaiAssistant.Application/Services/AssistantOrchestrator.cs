@@ -9,8 +9,6 @@ public class AssistantOrchestrator : IAssistantOrchestrator
 {
     private readonly IAssistantService _assistantService;
     private readonly IAssistantContextBuilder _contextBuilder;
-    private readonly IResponseCacheService _responseCache;
-    private readonly ITokenBudgetService _tokenBudget;
     private readonly IConversationRepository _conversationRepo;
     private readonly ILogger<AssistantOrchestrator> _logger;
     private long _lastLatencyMs;
@@ -19,15 +17,11 @@ public class AssistantOrchestrator : IAssistantOrchestrator
     public AssistantOrchestrator(
         IAssistantService assistantService,
         IAssistantContextBuilder contextBuilder,
-        IResponseCacheService responseCache,
-        ITokenBudgetService tokenBudget,
         IConversationRepository conversationRepo,
         ILogger<AssistantOrchestrator> logger)
     {
         _assistantService = assistantService;
         _contextBuilder = contextBuilder;
-        _responseCache = responseCache;
-        _tokenBudget = tokenBudget;
         _conversationRepo = conversationRepo;
         _logger = logger;
     }
@@ -140,12 +134,9 @@ public class AssistantOrchestrator : IAssistantOrchestrator
     public async Task<OrchestratorDiagnostics> GetDiagnosticsAsync(
         System.Threading.CancellationToken cancellationToken = default)
     {
-        var (hits, misses, hitRate) = await _responseCache.GetMetricsAsync(cancellationToken)
-            .ConfigureAwait(false);
         return new OrchestratorDiagnostics
         {
             LastLatencyMs = _lastLatencyMs,
-            CacheHitRate = hitRate,
             ActiveStreamCount = _activeStreamCount,
             LastAiCallAt = _lastAiCallAt
         };

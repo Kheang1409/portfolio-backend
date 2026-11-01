@@ -2,8 +2,9 @@ using System.Security.Cryptography;
 using System.Text;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
-using KaiAssistant.Application.Rag;
 using KaiAssistant.Domain.Entities.AI;
+using KaiAssistant.Domain.Entities.Resumes;
+using KaiAssistant.Domain.Interfaces.Repositories;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,15 +13,12 @@ using MongoDB.Driver;
 
 namespace KaiAssistant.Infrastructure.HostedServices;
 
-/// <summary>Loads the small, repository-owned portfolio corpus once at startup. It is not a queue or worker.</summary>
 public sealed class KnowledgeBootstrapHostedService(
     IMongoDatabase database,
-    IHostEnvironment environment,
+    IResumeRepository resumes,
     IEmbeddingService embeddings,
     IOptions<KnowledgeOptions> options,
     IOptions<EmbeddingOptions> embeddingOptions,
-    IOptions<RagOptions> ragOptions,
-    IKnowledgeIndexStore indexes,
     ILogger<KnowledgeBootstrapHostedService> logger) : IHostedService
 {
     private readonly IMongoCollection<KnowledgeDocument> _documents = database.GetCollection<KnowledgeDocument>("knowledge_base_documents");
@@ -28,100 +26,126 @@ public sealed class KnowledgeBootstrapHostedService(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        var config = options.Value;
-        var corpusPath = Path.IsPathRooted(config.CorpusPath)
-            ? config.CorpusPath
-            : Path.Combine(environment.ContentRootPath, config.CorpusPath);
-        if (!Directory.Exists(corpusPath))
+        var resume = await resumes.GetLatestAsync(cancellationToken).ConfigureAwait(false);
+        if (resume is null)
         {
-            logger.LogWarning("Knowledge corpus path does not exist: {CorpusPath}", corpusPath);
+            logger.LogInformation("No resume data is available; knowledge bootstrap skipped.");
             return;
         }
 
-        var files = Directory.EnumerateFiles(corpusPath, "*.*", SearchOption.TopDirectoryOnly)
-            .Where(path => new[] { ".md", ".txt", ".json" }.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
-            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ToArray();
-        foreach (var file in files)
-        {
-            await RefreshAsync(file, config, cancellationToken).ConfigureAwait(false);
-        }
+        var content = BuildContent(resume);
+        if (string.IsNullOrWhiteSpace(content)) return;
         var embedding = embeddingOptions.Value;
-        await indexes.InitializeIfMissingAsync(new KnowledgeIndexDescriptor(ragOptions.Value.IndexVersion, embedding.Provider, embedding.Model, embedding.Version, embedding.Dimensions), cancellationToken).ConfigureAwait(false);
-        logger.LogInformation("Knowledge bootstrap completed. Files={FileCount}", files.Length);
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    private async Task RefreshAsync(string file, KnowledgeOptions config, CancellationToken cancellationToken)
-    {
-        var source = Path.GetFileName(file);
-        var content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
-        var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
-        var current = await _documents.Find(x => x.Source == source && (x.Status == "Completed" || x.Status == "Indexed"))
-            .SortByDescending(x => x.UpdatedAtUtc).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        if (current?.ContentHash == contentHash)
-        {
-            return;
-        }
-
+        var indexVersion = embedding.IndexVersion;
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+        const string source = "resume:latest";
+        var title = resume.Personals?.PreferredName ?? resume.Personals?.LegalName ?? "Resume";
         var document = new KnowledgeDocument
         {
-            Id = ObjectId.GenerateNewId().ToString(), Source = source, Title = Path.GetFileNameWithoutExtension(file),
-            Content = content, ContentHash = contentHash, MimeType = MimeType(file), Status = "Processing",
-            Metadata = new(StringComparer.OrdinalIgnoreCase) { ["source"] = source, ["title"] = Path.GetFileNameWithoutExtension(file), ["contentHash"] = contentHash }
+            Id = ObjectId.GenerateNewId().ToString(), Source = source, Title = title, Content = content,
+            ContentHash = hash, Status = "Processing", MimeType = "text/plain",
+            Metadata = new(StringComparer.OrdinalIgnoreCase) { ["source"] = source, ["title"] = title, ["contentHash"] = hash, ["indexVersion"] = indexVersion }
         };
-        var pieces = Split(content, config.ChunkSize, config.ChunkOverlap);
         await _documents.InsertOneAsync(document, cancellationToken: cancellationToken).ConfigureAwait(false);
         try
         {
-            var embeddingConfig = embeddingOptions.Value;
+            var existing = await _documents.Find(x => x.Source == source && x.Status == "Completed")
+                .SortByDescending(x => x.UpdatedAtUtc).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            if (existing is not null)
+            {
+                existing.Metadata.TryGetValue("indexVersion", out var priorVersion);
+                if (existing.ContentHash == hash && priorVersion == indexVersion)
+                {
+                    await _documents.DeleteOneAsync(x => x.Id == document.Id, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+            }
+            var pieces = Split(content, options.Value.ChunkSize, options.Value.ChunkOverlap);
             IReadOnlyList<float[]>? vectors = null;
-            if (config.SemanticIndexingEnabled)
+            if (options.Value.SemanticIndexingEnabled)
             {
                 try
                 {
                     vectors = await embeddings.GenerateEmbeddingsAsync(pieces, EmbeddingPurpose.RetrievalDocument,
-                        Enumerable.Repeat<string?>(document.Title, pieces.Count).ToArray(), cancellationToken).ConfigureAwait(false);
+                        Enumerable.Repeat<string?>(title, pieces.Count).ToArray(), cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
-                    logger.LogWarning(ex, "Semantic indexing failed for {Source}; retaining keyword-only knowledge.", source);
+                    logger.LogWarning(ex, "Semantic indexing failed for resume data; retaining keyword retrieval.");
                 }
             }
+
             var chunks = pieces.Select((piece, index) => new KnowledgeChunk
             {
-                Id = ObjectId.GenerateNewId().ToString(), DocumentId = document.Id!, Source = source, Title = document.Title,
-                Content = piece, ContentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(piece))).ToLowerInvariant(), ChunkIndex = index,
-                Embedding = vectors is not null && index < vectors.Count ? vectors[index] : [],
-                EmbeddingProvider = embeddingConfig.Provider, EmbeddingModel = embeddingConfig.Model,
-                EmbeddingDimensions = vectors is not null ? embeddingConfig.Dimensions : 0,
-                EmbeddingPipelineVersion = embeddingConfig.Version, IndexVersion = ragOptions.Value.IndexVersion,
-                Metadata = new(StringComparer.OrdinalIgnoreCase) { ["source"] = source, ["title"] = document.Title, ["contentHash"] = contentHash, ["chunkIndex"] = index.ToString() }
+                Id = ObjectId.GenerateNewId().ToString(), DocumentId = document.Id!, Source = source, Title = title,
+                Content = piece, ContentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(piece))).ToLowerInvariant(),
+                ChunkIndex = index, Embedding = vectors is not null && index < vectors.Count ? vectors[index] : [],
+                EmbeddingProvider = embedding.Provider, EmbeddingModel = embedding.Model,
+                EmbeddingDimensions = vectors is not null && index < vectors.Count ? vectors[index].Length : 0,
+                EmbeddingPipelineVersion = embedding.Version, IndexVersion = indexVersion,
+                Metadata = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["source"] = source, ["title"] = title, ["contentHash"] = hash,
+                    ["chunkIndex"] = index.ToString(), ["embeddingPipelineVersion"] = embedding.Version,
+                    ["indexVersion"] = indexVersion, ["embeddingProvider"] = embedding.Provider, ["embeddingModel"] = embedding.Model,
+                    ["embeddingDimensions"] = (vectors is not null && index < vectors.Count ? vectors[index].Length : 0).ToString()
+                }
             }).ToArray();
             if (chunks.Length > 0) await _chunks.InsertManyAsync(chunks, cancellationToken: cancellationToken).ConfigureAwait(false);
-            document.Status = "Completed"; document.ChunkCount = chunks.Length; document.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            document.Status = "Completed";
+            document.ChunkCount = chunks.Length;
+            document.UpdatedAtUtc = DateTimeOffset.UtcNow;
             await _documents.ReplaceOneAsync(x => x.Id == document.Id, document, cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (current?.Id is not null)
-                await _documents.UpdateOneAsync(x => x.Id == current.Id, Builders<KnowledgeDocument>.Update.Set(x => x.Status, "Retired"), cancellationToken: cancellationToken).ConfigureAwait(false);
-            logger.LogInformation("Knowledge source refreshed: {Source}, chunks={ChunkCount}, semantic={Semantic}", source, chunks.Length, vectors is not null);
+            await _documents.UpdateManyAsync(x => x.Source == source && x.Id != document.Id && x.Status == "Completed",
+                Builders<KnowledgeDocument>.Update.Set(x => x.Status, "Retired"), cancellationToken: cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("Resume knowledge bootstrap completed. Chunks={ChunkCount} Semantic={Semantic}", chunks.Length, vectors is not null);
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             await _documents.UpdateOneAsync(x => x.Id == document.Id, Builders<KnowledgeDocument>.Update.Set(x => x.Status, "Failed"), cancellationToken: CancellationToken.None).ConfigureAwait(false);
-            logger.LogError(ex, "Knowledge refresh failed for {Source}; existing knowledge remains active.", source);
+            logger.LogError(ex, "Resume knowledge bootstrap failed; existing knowledge remains active.");
         }
     }
 
-    private static string MimeType(string path) => Path.GetExtension(path).ToLowerInvariant() switch { ".md" => "text/markdown", ".json" => "application/json", _ => "text/plain" };
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static string BuildContent(Resume resume)
+    {
+        var lines = new List<string>();
+        var personals = resume.Personals;
+        if (personals is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(personals.LegalName)) lines.Add($"Name: {personals.LegalName}");
+            if (!string.IsNullOrWhiteSpace(personals.PreferredName)) lines.Add($"Preferred name: {personals.PreferredName}");
+            if (!string.IsNullOrWhiteSpace(personals.WorkAuthorization)) lines.Add($"Work authorization: {personals.WorkAuthorization}");
+        }
+        if (!string.IsNullOrWhiteSpace(resume.Summary)) lines.Add($"Summary: {resume.Summary}");
+        if (resume.Skills.Count > 0) lines.Add($"Skills: {string.Join(", ", resume.Skills)}");
+        foreach (var item in resume.Experiences)
+        {
+            lines.Add($"Experience: {item.Role} at {item.Company}; {item.Location}; {string.Join("; ", item.BulletPoints)}");
+        }
+        foreach (var item in resume.Projects) lines.Add($"Project: {item.Name}. {item.Description}. Skills: {string.Join(", ", item.Skills)}");
+        foreach (var item in resume.Educations) lines.Add($"Education: {item.Degree}, {item.Institution}, {item.Location}");
+        foreach (var item in resume.Certifications) lines.Add($"Certification: {item.Title}, {item.Issuer}");
+        return string.Join("\n", lines);
+    }
+
     private static List<string> Split(string content, int size, int overlap)
     {
         var result = new List<string>();
         for (var start = 0; start < content.Length;)
         {
             var end = Math.Min(content.Length, start + size);
-            if (end < content.Length) { var boundary = content.LastIndexOfAny(['.', '!', '?', '\n'], end - 1, end - start); if (boundary > start + size / 2) end = boundary + 1; }
-            var piece = content[start..end].Trim(); if (piece.Length > 0) result.Add(piece);
-            if (end == content.Length) break; start = Math.Max(start + 1, end - overlap);
+            if (end < content.Length)
+            {
+                var boundary = content.LastIndexOfAny(['.', '!', '?', '\n'], end - 1, end - start);
+                if (boundary > start + size / 2) end = boundary + 1;
+            }
+            var piece = content[start..end].Trim();
+            if (piece.Length > 0) result.Add(piece);
+            if (end == content.Length) break;
+            start = Math.Max(start + 1, end - overlap);
         }
         return result;
     }
