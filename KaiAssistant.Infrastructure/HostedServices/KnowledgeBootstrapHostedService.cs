@@ -40,26 +40,42 @@ public sealed class KnowledgeBootstrapHostedService(
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
         const string source = "resume:latest";
         var title = resume.Personals?.PreferredName ?? resume.Personals?.LegalName ?? "Resume";
+
+        // Check before inserting: the content-hash index is unique, so reinserting the same
+        // completed resume on every Lambda cold start would otherwise fail host startup.
+        var existing = await _documents.Find(x => x.Source == source && x.Status == "Completed")
+            .SortByDescending(x => x.UpdatedAtUtc).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (existing is not null && existing.ContentHash == hash)
+        {
+            existing.Metadata.TryGetValue("indexVersion", out var priorVersion);
+            if (priorVersion == indexVersion)
+            {
+                logger.LogDebug("Resume knowledge bootstrap is already current.");
+                return;
+            }
+        }
+
         var document = new KnowledgeDocument
         {
             Id = ObjectId.GenerateNewId().ToString(), Source = source, Title = title, Content = content,
             ContentHash = hash, Status = "Processing", MimeType = "text/plain",
             Metadata = new(StringComparer.OrdinalIgnoreCase) { ["source"] = source, ["title"] = title, ["contentHash"] = hash, ["indexVersion"] = indexVersion }
         };
-        await _documents.InsertOneAsync(document, cancellationToken: cancellationToken).ConfigureAwait(false);
         try
         {
-            var existing = await _documents.Find(x => x.Source == source && x.Status == "Completed")
-                .SortByDescending(x => x.UpdatedAtUtc).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-            if (existing is not null)
-            {
-                existing.Metadata.TryGetValue("indexVersion", out var priorVersion);
-                if (existing.ContentHash == hash && priorVersion == indexVersion)
-                {
-                    await _documents.DeleteOneAsync(x => x.Id == document.Id, cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-            }
+            await _documents.InsertOneAsync(document, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        {
+            // Another Lambda instance may have won the same cold-start race. Treat that as an
+            // idempotent no-op; only swallow the collision if the expected content is present.
+            var competing = await _documents.Find(x => x.ContentHash == hash).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            if (competing is null) throw;
+            logger.LogInformation("Resume knowledge bootstrap was already claimed by another instance.");
+            return;
+        }
+        try
+        {
             var pieces = Split(content, options.Value.ChunkSize, options.Value.ChunkOverlap);
             IReadOnlyList<float[]>? vectors = null;
             if (options.Value.SemanticIndexingEnabled)
