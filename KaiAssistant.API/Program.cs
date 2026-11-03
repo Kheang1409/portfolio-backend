@@ -1,5 +1,3 @@
-using Amazon.Lambda.AspNetCoreServer;
-using Amazon.Lambda.AspNetCoreServer.Hosting;
 using KaiAssistant.API.Extensions;
 using KaiAssistant.API.HealthChecks;
 using KaiAssistant.API.Middleware;
@@ -9,7 +7,6 @@ using KaiAssistant.Application.Extensions;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
 using KaiAssistant.Infrastructure.Persistence;
-using KaiAssistant.Infrastructure.Payments;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
