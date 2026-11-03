@@ -87,6 +87,7 @@ public class ResumeContextProvider : IResumeContextProvider
                 var lines = new List<string>();
                 if (!string.IsNullOrWhiteSpace(education.Degree)) lines.Add($"Degree: {education.Degree}");
                 if (!string.IsNullOrWhiteSpace(education.Institution)) lines.Add($"Institution: {education.Institution}");
+                if (!string.IsNullOrWhiteSpace(education.Status)) lines.Add($"Status: {education.Status}");
                 if (!string.IsNullOrWhiteSpace(education.Location)) lines.Add($"Location: {education.Location}");
                 if (education.StartDates.HasValue || education.EndDate.HasValue)
                 {
