@@ -9,6 +9,7 @@ using KaiAssistant.Application.Extensions;
 using KaiAssistant.Application.Interfaces;
 using KaiAssistant.Application.Options;
 using KaiAssistant.Infrastructure.Persistence;
+using KaiAssistant.Infrastructure.Payments;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -106,13 +107,7 @@ builder.Services.AddOptions<OpsSecurityOptions>()
     .Bind(builder.Configuration.GetSection(OpsSecurityOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.Services.AddOptions<KaiAssistant.Infrastructure.Payments.PayPalOptions>()
-    .Bind(builder.Configuration.GetSection(KaiAssistant.Infrastructure.Payments.PayPalOptions.SectionName))
-    .Validate(options => string.IsNullOrWhiteSpace(options.Environment) || options.Environment is "sandbox" or "live", "PayPal Environment must be sandbox or live.")
-    .Validate(options => options.MinimumDonation > 0 && options.MaximumDonation >= options.MinimumDonation, "PayPal donation limits are invalid.")
-    .Validate(options => string.IsNullOrWhiteSpace(options.MerchantId) || options.MerchantId.Length <= 64, "PayPal merchant ID is invalid.")
-    .Validate(options => options.EmailRetentionDays >= 1 && options.EmailRetentionDays <= 3650, "PayPal email retention must be 1 to 3650 days.")
-    .ValidateOnStart();
+builder.Services.AddPayPalOptions(builder.Configuration);
 builder.Services.AddOptions<LoadTestHooksOptions>()
     .Bind(builder.Configuration.GetSection(LoadTestHooksOptions.SectionName))
     .ValidateOnStart();

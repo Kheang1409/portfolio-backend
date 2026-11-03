@@ -51,6 +51,7 @@ Dependency auditing and supply-chain decisions are documented in [docs/dependenc
 - The compose file does not provision MongoDB, so a reachable MongoDB instance is still required for data-backed features.
 - `KnowledgeBootstrapHostedService` indexes the latest MongoDB resume at startup; add or update the resume in the configured database for the frontend and assistant to use it.
 - PayPal donation state and receipt outbox processing use MongoDB. RabbitMQ is not required for the active donation or assistant paths.
+- PayPal settings accept both the .NET `PayPal__PropertyName` variables and legacy flat Lambda variables (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_ENVIRONMENT`, `PAYPAL_WEBHOOK_ID`, and `PAYPAL_MERCHANT_ID`). The .NET section values take precedence when both forms are configured.
 
 ## Quick Start
 
@@ -205,6 +206,7 @@ curl http://localhost:5000/health/live
 - If cache-related flows fail, confirm Redis is reachable and `REDIS__CONNECTIONSTRING` points to the right instance.
 - If `/ops/*` routes return 404 in production, confirm ops are enabled in configuration.
 - If the assistant does not remember prior chat in local testing, verify requests include `context.metadata.sessionId` and that MongoDB is reachable.
+- If `GET /api/donations/config` returns 404, verify that Lambda has non-empty `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` variables (or `PayPal__ClientId` and `PayPal__ClientSecret`) and that the deployed application supports those names.
 
 ## PayPal donation checkout
 
