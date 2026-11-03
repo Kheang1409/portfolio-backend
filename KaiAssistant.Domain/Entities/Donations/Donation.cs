@@ -13,6 +13,7 @@ public sealed class Donation
     public string Currency { get; set; } = "USD";
     public string Status { get; set; } = "CREATED";
     public DateTimeOffset? LastPaymentEventAtUtc { get; set; }
+    public DateTimeOffset? ProcessingStartedAtUtc { get; set; }
     public string DonorName { get; set; } = string.Empty;
     public bool DonorEmailProvided { get; set; }
     public string? DonorEmail { get; set; }

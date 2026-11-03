@@ -11,6 +11,8 @@ public sealed class DonationWebhookEvent
     public string EventType { get; set; } = string.Empty;
     public string Status { get; set; } = "Received";
     public DateTimeOffset ReceivedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? ProcessingStartedAtUtc { get; set; }
+    public string? ProcessingLeaseId { get; set; }
     public DateTimeOffset? ProcessedAtUtc { get; set; }
     public int Attempts { get; set; }
 }

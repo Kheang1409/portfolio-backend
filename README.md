@@ -1,15 +1,23 @@
 # KaiAssistant API
 
-> Runtime note: the assistant builds searchable knowledge from the latest resume stored in MongoDB. Contact and visit data are also persisted in MongoDB. RabbitMQ/outbox publishing is not part of the active startup path.
-> KaiAssistant API is the .NET 10 backend for the portfolio app.
+The .NET 10 backend for Kai's portfolio. It serves resume data, streams assistant responses, accepts contact and visitor requests, and processes PayPal donations. MongoDB is the persistence layer for resumes, assistant knowledge/conversations, contact and visit data, and donation state.
 
-It focuses on the routes and services that the frontend actually uses:
+## API surface
 
-- assistant streaming through `POST /api/assistant`
-- contact form processing through `POST /api/contacts`
-- visitor analytics ingestion through `POST /api/visits`
-- resume retrieval through `GET /api/resumes/latest`
-- health checks through `/health/ready` and `/health/live`
+| Route | Purpose |
+| --- | --- |
+| `POST /api/assistant` | Stream an assistant response as NDJSON, grounded in resume knowledge. |
+| `POST /api/contacts` | Accept a portfolio contact form submission. |
+| `POST /api/visits` | Record visitor analytics. |
+| `GET /api/resumes/latest` | Return the latest resume document. |
+| `GET /api/donations/config` | Return public checkout configuration. |
+| `GET /api/donations/leaderboard` | Return public, opted-in completed donations. |
+| `POST /api/donations/orders` | Create or recover a donation order. |
+| `POST /api/donations/capture` | Capture and verify an approved order. |
+| `POST /api/donations/webhook` | Process PayPal capture/refund/reversal events. |
+| `GET /api/health`, `/health/live`, `/health/ready` | Basic, liveness, and readiness checks. |
+
+Operational endpoints are under `/ops/*` and depend on backend configuration. The frontend proxies browser requests through same-origin Next.js routes; see the [frontend README](../frontend/README.md).
 
 ## Retrieval and knowledge
 
@@ -41,6 +49,8 @@ Dependency auditing and supply-chain decisions are documented in [docs/dependenc
 - The backend uses Serilog, OpenTelemetry, CORS, response compression, output caching, authentication, and custom middleware.
 - Health checks are split between the controller health route and app-level ready/live probes.
 - The compose file does not provision MongoDB, so a reachable MongoDB instance is still required for data-backed features.
+- `KnowledgeBootstrapHostedService` indexes the latest MongoDB resume at startup; add or update the resume in the configured database for the frontend and assistant to use it.
+- PayPal donation state and receipt outbox processing use MongoDB. RabbitMQ is not required for the active donation or assistant paths.
 
 ## Quick Start
 
@@ -48,14 +58,15 @@ Dependency auditing and supply-chain decisions are documented in [docs/dependenc
 
 - .NET SDK 10.
 - Docker Desktop.
-- MongoDB, if you want the backend features that read or write persisted data.
+- A reachable MongoDB instance for resume, assistant, contact, visit, and donation data.
+- `GEMINI_API_KEY` for assistant generation; without it, assistant responses are unavailable.
 
 ### Environment
 
 Copy the root template and fill in the required values:
 
-```bash
-cp ../.env.example ../.env
+```powershell
+Copy-Item ..\.env.example ..\.env
 ```
 
 Key variables:
@@ -65,19 +76,22 @@ Key variables:
 - `MONGODB_DATABASE` - MongoDB database name.
 - `SMTP_*` - optional contact email configuration.
 - `ALLOWED_ORIGINS` - CORS origins.
+- `PAYPAL_*` - optional PayPal checkout and webhook configuration.
+
+The frontend needs `BACKEND_API_URL=http://localhost:5000` when run locally. In Docker Compose it is set to `http://backend:8080`.
 
 ### Run With Docker Compose
 
-```bash
+```powershell
 cd ..
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
-This starts the backend and frontend containers. The backend is exposed on `http://localhost:5000` and container port `8080`.
+This starts the backend, frontend, and Redis containers. The backend is exposed on `http://localhost:5000` and container port `8080`; MongoDB is not included and must be configured separately.
 
 ### Run Locally
 
-```bash
+```powershell
 cd backend
 dotnet restore KaiAssistant.sln
 dotnet build KaiAssistant.sln
@@ -86,10 +100,12 @@ dotnet run --project KaiAssistant.API
 
 ### Run Tests
 
-```bash
+```powershell
 cd backend
 dotnet test KaiAssistant.Tests/KaiAssistant.Tests.csproj
 ```
+
+See [testing notes](docs/testing.md) for integration-test details and the full solution command.
 
 ## API Examples
 
@@ -167,36 +183,43 @@ curl http://localhost:5000/health/live
 
 ## Documentation Index
 
-- `docs/architecture.md`
-- `docs/ai-pipeline.md`
-- `docs/rag-architecture.md`
-- `docs/embedding-strategy.md`
-- `docs/corpus-management.md`
-- `docs/scalability.md`
-- `docs/resilience.md`
-- `docs/tradeoffs.md`
-- `docs/api-examples.md`
-- `docs/diagrams/system-diagram.md`
-- `docs/diagrams/ai-flow-diagram.md`
+- [Architecture](docs/architecture.md)
+- [AI pipeline](docs/ai-pipeline.md)
+- [RAG architecture](docs/rag-architecture.md)
+- [Embedding strategy](docs/embedding-strategy.md)
+- [Corpus management](docs/corpus-management.md)
+- [Scalability](docs/scalability.md)
+- [Resilience](docs/resilience.md)
+- [Tradeoffs](docs/tradeoffs.md)
+- [API examples](docs/api-examples.md)
+- [Dependency security and supply-chain policy](docs/dependency-security.md)
+- [Testing](docs/testing.md)
+- [System diagram](docs/diagrams/system-diagram.md)
+- [AI flow diagram](docs/diagrams/ai-flow-diagram.md)
 
 ## Troubleshooting
 
+- If `GET /api/resumes/latest` returns 404, add a resume document to the configured MongoDB database.
 - If assistant requests fail, confirm `GEMINI_API_KEY` is present and the backend can reach the configured Gemini endpoint.
 - If data-backed endpoints fail, confirm MongoDB is reachable and the connection string/database name are correct.
 - If cache-related flows fail, confirm Redis is reachable and `REDIS__CONNECTIONSTRING` points to the right instance.
 - If `/ops/*` routes return 404 in production, confirm ops are enabled in configuration.
 - If the assistant does not remember prior chat in local testing, verify requests include `context.metadata.sessionId` and that MongoDB is reachable.
 
-# PayPal donation checkout
+## PayPal donation checkout
 
 Donation payments use the PayPal Orders v2 API. The browser receives only the PayPal client ID and redirects/card entry remain inside PayPal Checkout; this application never receives card numbers, security codes, or expiration values. PayPal may show eligible cards based on account approval, buyer region, and transaction risk; “all cards” cannot be guaranteed by the application.
 
+Each checkout attempt is keyed by a UUID. Retries reuse that key, while the backend recovers the existing order and its persisted amount/currency instead of trusting changed retry payloads. PayPal order/capture requests use stable provider idempotency IDs. Webhook delivery is claimed with an atomic MongoDB lease; completed event IDs are terminal, and only failed or expired processing leases can be reclaimed.
+
 ## Sandbox setup
 
-1. Create a PayPal Developer Sandbox REST app and configure backend-only `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` secrets. Keep `PAYPAL_ENVIRONMENT=sandbox`.
+1. Create a PayPal Developer Sandbox REST app and configure backend-only `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` secrets. Keep `PAYPAL_ENVIRONMENT=sandbox`; never use your personal/live buyer account or real card details for this check.
 2. Set `PayPal__Currency`, donation minimum/maximum, optional `PAYPAL_MERCHANT_ID`, `PAYPAL_WEBHOOK_ID`, and `PAYPAL_EMAIL_RETENTION_DAYS` in backend configuration. Configure SMTP through the existing `SMTP_*` settings if optional receipts are desired.
 3. Add the HTTPS endpoint `{API_BASE_URL}/api/donations/webhook` to the matching Sandbox REST app. Subscribe to `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED`, and `PAYMENT.CAPTURE.REVERSED`, then store its generated webhook ID as `PayPal__WebhookId`.
-4. Run the frontend and backend locally, use Sandbox buyer accounts/cards, and verify the order, capture, leaderboard opt-in, and receipt outbox. Do not use live credentials or real payments for automated tests.
+4. Run the frontend and backend locally, use a separate PayPal Sandbox buyer account, and verify one successful low-value Sandbox donation. Confirm that the server-created amount is shown at PayPal, capture status is `COMPLETED`, the public entry appears only after opting in, the email stays private, and the receipt outbox records delivery (when SMTP is enabled). Then test a cancelled checkout and a declined/failed payment; neither should appear on the leaderboard or send a receipt. Sandbox transactions use test funds and do not charge a real card.
+
+The app's webhook listener must be reachable by PayPal over HTTPS. A local `localhost` URL cannot receive PayPal webhooks; for local testing, either use the deployed Sandbox webhook endpoint with its own webhook ID, or expose the local API through a temporary HTTPS tunnel and register that exact URL in the Sandbox app. The webhook ID belongs to that registered endpoint. Local order creation and capture can be exercised without webhooks, but refund/reversal synchronization requires a reachable registered listener. Automated tests mock PayPal and never create Sandbox or Live payments.
 
 The production GitHub Actions deployment also requires repository secrets `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_ENVIRONMENT`, and `PAYPAL_WEBHOOK_ID` (the PayPal-issued webhook ID, not the listener URL). `PAYPAL_MERCHANT_ID` is optional. These values are passed to the SAM parameters that configure the Lambda; setting Lambda variables manually is not a substitute for setting the deployment secrets because a stack update can replace function configuration.
 

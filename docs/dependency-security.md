@@ -35,6 +35,10 @@ The OpenTelemetry packages are intentionally upgraded as one family. The existin
 
 Production credentials must come from environment or secret management. Development configuration is credential-free; local `.env` values are ignored and must never be committed. Any credential previously present in local development configuration should be rotated externally. NuGet uses the standard HTTPS feed; no feed credentials or private sources are committed.
 
+## Runtime security posture
+
+The API container uses a multi-stage .NET 10 build and runs as a non-root user. Resume knowledge is read from the MongoDB resume collection. Runtime credentials are supplied through environment or deployment secret management, not committed application settings.
+
 ## Verification
 
 The security-phase verification used an isolated artifacts directory because the IDE-owned `obj` tree was locked:

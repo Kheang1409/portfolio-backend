@@ -12,13 +12,6 @@ public sealed class DonationsController(IDonationService donations) : Controller
     [ProducesResponseType(typeof(CreateDonationResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> CreateOrder([FromBody] CreateDonationRequest request, CancellationToken cancellationToken)
     {
-        if (request.Amount <= 0) return BadRequest(new { message = "Donation amount must be greater than zero." });
-        if (request.Name?.Length > 80 || request.Email?.Length > 254 || request.Remark?.Length > 240)
-            return BadRequest(new { message = "Donation details exceed the allowed length." });
-        if (!string.IsNullOrWhiteSpace(request.Email) && !System.Net.Mail.MailAddress.TryCreate(request.Email, out _))
-            return BadRequest(new { message = "Enter a valid email address or leave it blank." });
-        if (string.IsNullOrWhiteSpace(request.IdempotencyKey) || request.IdempotencyKey.Length > 64 || !Guid.TryParse(request.IdempotencyKey, out _))
-            return BadRequest(new { message = "A valid donation request key is required." });
         try
         {
             return Ok(await donations.CreateOrderAsync(request, cancellationToken).ConfigureAwait(false));
@@ -26,6 +19,14 @@ public sealed class DonationsController(IDonationService donations) : Controller
         catch (ArgumentOutOfRangeException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException)
+        {
+            return Conflict(new { message = "This donation request is already being processed or could not be started. Please retry shortly." });
         }
     }
 
